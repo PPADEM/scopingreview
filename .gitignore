@@ -7,9 +7,10 @@ Runs/
 
 .DS
 
-/.quarto/
-**/*.quarto_ipynb
-/_site/
+.quarto
 
 outputs/
 .DS_Store
+
+/.quarto/
+**/*.quarto_ipynb

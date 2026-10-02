@@ -1,0 +1,58 @@
+[
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "\nscopingreview\n",
+    "section": "",
+    "text": "PPADEM Code & Packages\n\n\nAn automated, user-friendly R pipeline for conducting systematic and scoping literature reviews across Elsevier Scopus and OpenAlex bibliographic databases."
+  },
+  {
+    "objectID": "index.html#what-this-tool-does",
+    "href": "index.html#what-this-tool-does",
+    "title": "\nscopingreview\n",
+    "section": "🎯 What This Tool Does",
+    "text": "🎯 What This Tool Does\nThis pipeline automates the labor-intensive initial stages of a systematic literature review:\n\nConstructs Boolean API Queries: Combines your thematic search keywords and geographic filters using precise boolean logic across both Scopus and OpenAlex, supporting single-category (OR / AND) or multi-block (multi) search modes.\nQueries Scopus & OpenAlex: Programmatically retrieves academic publications, handling pagination and rate limits automatically.\nHarmonizes Metadata: Standardizes schemas across both databases into a single clean format.\nPerforms 2-Stage Deduplication: Merges duplicate papers across databases using exact DOI matching and fuzzy title string matching.\nFlags Curated Target Journals: Automatically checks each paper’s journal against a reference list of ~121 top Political Science, Administrative, and Area/African Studies journals and flags them (Y / N) in a dedicated column.\nExports Customizable Datasets: Saves structured CSV datasets directly to root or to custom subfolder paths specified in output_filename."
+  },
+  {
+    "objectID": "index.html#how-the-search-logic-works",
+    "href": "index.html#how-the-search-logic-works",
+    "title": "\nscopingreview\n",
+    "section": "🔍 How the Search Logic Works",
+    "text": "🔍 How the Search Logic Works\nUnderstanding how your search parameters are built into API queries:\n\n1. Topic Keywords (OR, AND, or multi Logic)\nKeywords grouped inside each topic category in SEARCH_TOPICS are joined together using the topic_operator setting:\n\nOR Mode (default): (\"political party\" OR \"party organization\" OR \"party decline\")\nAND Mode: (\"political party\" AND \"party organization\" AND \"party decline\")\nMULTI Mode: Combines multiple concept blocks (e.g. BLOCK 1 AND BLOCK 2 AND … AND BLOCK N), where terms inside each block are separated by OR: ((Block 1 terms separated by OR) AND (Block 2 terms separated by OR)) AND (GEO terms separated by OR)\n\n\n\n2. Geographic Terms (OR Logic, Optional)\nGeographic terms in GEO_TERMS are optional. When provided, they are joined together with OR operators:\n\n(\"Africa\" OR \"Sub-Saharan Africa\" OR \"West Africa\")\n\nIf geo_terms = NULL or omitted, no geographic filter is applied, allowing for a general/global broad search.\n\n\n3. Combining Topics & Geography (AND Logic)\nWhen geo_terms are provided, the pipeline joins the topic group and the geographic group together using an AND operator. When geo_terms is NULL, only the topic query and publication year filter are applied:\nFinal Query with Geography = (Topic Keywords [OR/AND]) AND (Geographic Terms [OR]) AND PUBYEAR &gt;= START_YEAR\nFinal Query without Geography = (Topic Keywords [OR/AND]) AND PUBYEAR &gt;= START_YEAR"
+  },
+  {
+    "objectID": "index.html#quick-start-guide",
+    "href": "index.html#quick-start-guide",
+    "title": "\nscopingreview\n",
+    "section": "⚙️ Quick Start Guide",
+    "text": "⚙️ Quick Start Guide\n\n1. Installation\nInstall the package directly from GitHub (R version 4.1+ recommended). Its dependencies (rscopus, openalexR, dplyr, etc.) are installed automatically:\ninstall.packages(\"remotes\")\nremotes::install_github(\"PPADEM/scopingreview\")\nThen load it with:\nlibrary(scopingreview)\n\n\n2. API Key Setup\nStore your API keys in your user R environment file (~/.Renviron). This allows R to automatically authenticate your queries without hardcoding keys in your script:\nAdd the following lines to ~/.Renviron:\nOPENALEX_KEY=\"your_openalex_api_key\"\nELSEVIER_SCOPUS_KEY=\"your_scopus_api_key\""
+  },
+  {
+    "objectID": "index.html#customizing-output-file-locations-search-modes",
+    "href": "index.html#customizing-output-file-locations-search-modes",
+    "title": "\nscopingreview\n",
+    "section": "🛠️ Customizing Output File Locations & Search Modes",
+    "text": "🛠️ Customizing Output File Locations & Search Modes\nBy default, files are saved in your current working directory. If a subfolder path is included in output_filename, the directory is created automatically:\nlibrary(scopingreview)\n\n# Run 1: General Broad Search (OR mode)\ngeneral_data &lt;- run_scoping_review(\n  search_topics   = list(party = c(\"political party\", \"party decline\")),\n  geo_terms       = c(\"Africa\", \"Sub-Saharan Africa\"),\n  start_year      = 2020,\n  topic_operator  = \"OR\",\n  output_filename = \"general_search.csv\"\n)\n\n# Run 2: Multi-Block Search (BLOCK 1 AND BLOCK 2 AND GEO)\nmulti_data &lt;- run_scoping_review(\n  search_topics   = list(\n    parties = c(\"political party\", \"party organization\"),\n    communication = c(\"communication\", \"meeting\", \"social media\")\n  ),\n  geo_terms       = c(\"Africa\", \"Sub-Saharan Africa\"),\n  start_year      = 2020,\n  topic_operator  = \"multi\",\n  output_filename = \"outputs/multi_block_search.csv\"\n)"
+  },
+  {
+    "objectID": "index.html#example-script",
+    "href": "index.html#example-script",
+    "title": "\nscopingreview\n",
+    "section": "🚀 Example Script",
+    "text": "🚀 Example Script\nA complete example script with three different search runs is included with the package. Copy it to your working directory to use as a starting point:\nfile.copy(\n  system.file(\"examples\", \"api_pipeline_example.R\", package = \"scopingreview\"),\n  \"api_pipeline_example.R\"\n)\nOr view it on GitHub at inst/examples/api_pipeline_example.R.\nHelp pages are available for each exported function, e.g. ?run_scoping_review."
+  },
+  {
+    "objectID": "index.html#output-file-schema",
+    "href": "index.html#output-file-schema",
+    "title": "\nscopingreview\n",
+    "section": "📊 Output File Schema",
+    "text": "📊 Output File Schema\nOutputs are exported to the location specified in output_filename:\n\n\n\n\n\n\n\n\nColumn Name\nDescription\nExample\n\n\n\n\ndatabase\nProvenance database source(s)\nScopus; OpenAlex\n\n\nquery_category\nThematic search category or multi-block combination\nparty_linkages or party_block & communication_block\n\n\nsearch_query\nExact Boolean API search query string executed for this record\n(\"political party\" OR \"party decline\") AND (\"Africa\" OR ...)\n\n\nsearch_date\nDate (YYYY-MM-DD) when the search pipeline was executed\n2026-08-24\n\n\nscopus_id\nScopus record identifier\n2-s2.0-85123456789\n\n\nopenalex_id\nOpenAlex work URI\nhttps://openalex.org/W4323539164\n\n\ntitle\nArticle title\nParties, Political Finance, and Representation\n\n\njournal\nSource journal / publication name\nJournal of Modern African Studies\n\n\npublication_year\nYear of publication\n2023\n\n\ndoi\nStandardized DOI\n10.1017/s0022278x2300001\n\n\ncitations\nHighest reported citation count\n14\n\n\nabstract\nFull article text abstract\nThis article examines...\n\n\nauthors\nSemicolon-separated list of author names\nSmith, J.; Kwame, A.\n\n\ntarget_journal\nFlag (Y/N) indicating if journal matches curated political science/administrative/African studies list\nY\n\n\n\n\nSource & issue tracker: The full source code, README and license are on GitHub at github.com/PPADEM/scopingreview. Bug reports and feature requests are welcome via GitHub Issues."
+  },
+  {
+    "objectID": "LICENSE.html",
+    "href": "LICENSE.html",
+    "title": "MIT License",
+    "section": "",
+    "text": "MIT License\nCopyright (c) 2026 scopingreview authors\nPermission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\nThe above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.\nTHE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE."
+  }
+]
