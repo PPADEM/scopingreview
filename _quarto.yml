@@ -1,0 +1,39 @@
+project:
+  type: website
+
+website:
+  title: "scopingreview"
+  description: "Automated systematic & scoping literature review pipeline for R, built for the PPADEM project"
+  site-url: "https://ppadem.github.io/scopingreview"
+  favicon: images/PPADEM Logo.png
+
+  navbar:
+    logo: images/PPADEM Logo.png
+    title: "scopingreview"
+    search: false
+    left: []
+    right:
+      - icon: globe
+        text: PPADEM Project
+        href: https://ppadem.github.io/
+      - icon: github
+        aria-label: GitHub
+        href: https://github.com/PPADEM/scopingreview
+
+  page-footer:
+    left: |
+      **PPADEM** — Political Parties and Democracy in Africa
+      An ERC Synergy Project (2026–2032).
+    right: |
+      Part of the [PPADEM](https://ppadem.github.io/) code collection.
+    border: true
+
+format:
+  html:
+    theme:
+      - cosmo
+    css: styles.css
+    toc: true
+    toc-depth: 3
+    smooth-scroll: true
+    code-copy: true

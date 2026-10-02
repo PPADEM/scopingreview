@@ -5,3 +5,9 @@
 ^outputs$
 ^Runs$
 ^\.quarto$
+^_quarto\.yml$
+^index\.qmd$
+^styles\.css$
+^images$
+^_site$
+^\.github$
