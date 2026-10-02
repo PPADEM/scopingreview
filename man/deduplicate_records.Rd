@@ -8,16 +8,64 @@ deduplicate_records(df, target_journals = TARGET_JOURNALS)
 }
 \arguments{
 \item{df}{Combined output of \code{\link[=fetch_scopus_data]{fetch_scopus_data()}} and
-\code{\link[=fetch_openalex_data]{fetch_openalex_data()}}.}
+\code{\link[=fetch_openalex_data]{fetch_openalex_data()}} (or any tibble with the same \code{database},
+\code{query_category}, \code{search_query}, \code{search_date}, \code{scopus_id},
+\code{openalex_id}, \code{title}, \code{journal}, \code{publication_year}, \code{doi},
+\code{citations}, \code{abstract} and \code{authors} columns). Returned unchanged if it
+has zero rows.}
 
-\item{target_journals}{Character vector of journal names to flag.}
+\item{target_journals}{Character vector of journal names to match against,
+case- and punctuation-insensitively. Defaults to the package's
+\link{TARGET_JOURNALS} list; pass your own vector to flag a different list of
+journals instead.}
 }
 \value{
-A deduplicated tibble.
+A tibble with the same columns as \code{df}, one row per unique record,
+plus a \code{target_journal} column (\code{"Y"}/\code{"N"}).
 }
 \description{
-Stage 1 merges records with the same cleaned DOI. Stage 2 merges records
-whose normalised titles have a Jaro-Winkler distance of at most 0.12 and
-publication years within one year of each other. Finally adds a
-\code{target_journal} column (\code{"Y"}/\code{"N"}).
+Collapses duplicate records across (and within) databases in two stages,
+then flags whether each remaining record's journal is on a curated list.
+When records are merged, \code{database}, \code{query_category}, \code{search_query} and
+\code{search_date} are concatenated across the group (so a record found by both
+databases, or by multiple topic searches, keeps that provenance), the
+longest non-empty \code{journal}, \code{abstract} and \code{authors} string is kept, the
+first non-missing \code{title}/\code{doi} is kept, and \code{citations} is the group
+maximum.
+}
+\details{
+\itemize{
+\item \strong{Stage 1 (exact DOI match)}: records whose cleaned DOI (lowercased,
+\code{doi.org}/\code{doi:} prefixes and trailing slashes stripped) is identical are
+merged. Records with no usable DOI are left untouched at this stage.
+\item \strong{Stage 2 (fuzzy title match)}: among the Stage 1 output, any two
+records whose cleaned titles (lowercased, punctuation stripped, extra
+whitespace collapsed) have a Jaro-Winkler distance of at most \code{0.12}
+(\code{stringdist::stringdistmatrix(method = "jw", p = 0.1)}) \emph{and} whose
+publication years are within 1 year of each other (or either year is
+missing) are merged. This stage compares every pair of Stage 1 records,
+so cost grows quadratically with their number.
+}
+
+Finally, a \code{target_journal} column (\code{"Y"}/\code{"N"}) is added by comparing each
+record's cleaned journal name (lowercased, \code{&} expanded to \code{and},
+punctuation stripped) against \code{target_journals}.
+}
+\examples{
+raw <- tibble::tibble(
+  database = c("Scopus", "OpenAlex"),
+  query_category = c("party", "party"),
+  search_query = c("q1", "q1"),
+  search_date = c("2026-01-01", "2026-01-01"),
+  scopus_id = c("SID1", NA),
+  openalex_id = c(NA, "W123"),
+  title = c("Political Parties in Africa", "Political parties in Africa."),
+  journal = c("Party Politics", "Party Politics"),
+  publication_year = c(2021, 2021),
+  doi = c("10.1000/example", "10.1000/example"),
+  citations = c(5, 8),
+  abstract = c("Short.", "A longer abstract."),
+  authors = c("Smith, J.", "Smith, J.")
+)
+deduplicate_records(raw)
 }

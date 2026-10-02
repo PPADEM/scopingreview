@@ -15,34 +15,67 @@ run_scoping_review(
 )
 }
 \arguments{
-\item{search_topics}{Named list of character vectors of keywords, one
-element per topic category (or concept block in \code{"multi"} mode).}
+\item{search_topics}{Named list of character vectors of keywords. In
+\code{"OR"}/\code{"AND"} mode, one element per topic category: each category is
+queried separately, and the list names become the \code{query_category}
+values in the output. In \code{"multi"} mode, each element is instead treated
+as one concept block, and all blocks are combined into a single query
+(see \code{topic_operator}).}
 
 \item{geo_terms}{Optional character vector of geographic terms, joined with
-\code{OR}. \code{NULL} applies no geographic filter.}
+\code{OR}, e.g. \code{("Africa" OR "Sub-Saharan Africa")}. \code{NULL}, or a vector with
+no non-blank entries, applies no geographic filter.}
 
-\item{start_year}{Earliest publication year to include.}
+\item{start_year}{Earliest publication year to include (inclusive). Sent to
+the API as \code{PUBYEAR > start_year - 1}.}
 
-\item{topic_operator}{\code{"OR"}, \code{"AND"} or \code{"multi"}. See the README for how
-each mode builds the query.}
+\item{topic_operator}{How keywords in \code{search_topics} are combined. One of:
+\itemize{
+\item \code{"OR"} (default) - keywords within each topic category are joined with
+\code{OR}, e.g. \verb{("political party" OR "party decline")}.
+\item \code{"AND"} - keywords within each topic category are joined with \code{AND}
+instead.
+\item \code{"multi"} - every element of \code{search_topics} is treated as a block of
+\code{OR}-joined keywords, and the blocks are combined with \code{AND}:
+\verb{(block 1 OR-terms) AND (block 2 OR-terms) AND ...}. The resulting
+\code{query_category} is the topic names joined with \code{" & "}.
+}
 
-\item{max_scopus_records}{Maximum Scopus records to retrieve per query.}
+When \code{geo_terms} is supplied, it is combined with the topic query using
+\code{AND}. Matching is case-insensitive after trimming whitespace; any other
+value silently falls back to \code{"OR"}.}
 
-\item{max_openalex_pages}{Maximum OpenAlex pages to retrieve per query
-(200 records per page).}
+\item{max_scopus_records}{Maximum Scopus records to retrieve per topic
+category (or per combined query in \code{"multi"} mode). See
+\code{\link[=fetch_scopus_data]{fetch_scopus_data()}}.}
 
-\item{output_filename}{Path of the CSV file to write. Missing directories
-are created.}
+\item{max_openalex_pages}{Maximum OpenAlex pages to retrieve per topic
+category (or per combined query in \code{"multi"} mode), at 200 records per
+page. See \code{\link[=fetch_openalex_data]{fetch_openalex_data()}}.}
+
+\item{output_filename}{Path of the CSV file to write, relative to the
+current working directory unless an absolute path is given. A \code{.csv}
+extension is appended automatically if missing, and any missing parent
+directories (e.g. \code{"outputs/"} in \code{"outputs/general_search.csv"}) are
+created.}
 }
 \value{
-The deduplicated dataset (also written to \code{output_filename}).
+The deduplicated dataset as a tibble (also written to
+\code{output_filename}), with the columns described in
+\code{\link[=deduplicate_records]{deduplicate_records()}}. Returns an empty tibble, with a console message
+and without writing a file, if neither database returns any records.
 }
 \description{
-Fetches records from Scopus and OpenAlex, deduplicates them, flags target
-journals and writes the result to a CSV file.
+End-to-end wrapper that calls \code{\link[=fetch_scopus_data]{fetch_scopus_data()}} and
+\code{\link[=fetch_openalex_data]{fetch_openalex_data()}} with the same search parameters, combines their
+output, deduplicates it with \code{\link[=deduplicate_records]{deduplicate_records()}}, writes the result to
+\code{output_filename} as CSV, and returns it as well. Progress (records
+fetched per database, duplicates merged, target journal matches) is
+printed to the console as the pipeline runs.
 }
 \examples{
 \dontrun{
+# Requires ELSEVIER_SCOPUS_KEY and/or OPENALEX_KEY to be set in ~/.Renviron
 results <- run_scoping_review(
   search_topics = list(party = c("political party", "party decline")),
   geo_terms = c("Africa", "Sub-Saharan Africa"),

@@ -14,3 +14,7 @@ Political science, public administration and area/African studies journals
 used by \code{\link[=deduplicate_records]{deduplicate_records()}} to set the \code{target_journal} flag. Pass your
 own character vector to \code{target_journals} to use a different list.
 }
+\examples{
+length(TARGET_JOURNALS)
+head(TARGET_JOURNALS)
+}

@@ -13,24 +13,65 @@ fetch_openalex_data(
 )
 }
 \arguments{
-\item{search_topics}{Named list of character vectors of keywords, one
-element per topic category (or concept block in \code{"multi"} mode).}
+\item{search_topics}{Named list of character vectors of keywords. In
+\code{"OR"}/\code{"AND"} mode, one element per topic category: each category is
+queried separately, and the list names become the \code{query_category}
+values in the output. In \code{"multi"} mode, each element is instead treated
+as one concept block, and all blocks are combined into a single query
+(see \code{topic_operator}).}
 
 \item{geo_terms}{Optional character vector of geographic terms, joined with
-\code{OR}. \code{NULL} applies no geographic filter.}
+\code{OR}, e.g. \code{("Africa" OR "Sub-Saharan Africa")}. \code{NULL}, or a vector with
+no non-blank entries, applies no geographic filter.}
 
-\item{start_year}{Earliest publication year to include.}
+\item{start_year}{Earliest publication year to include (inclusive). Sent to
+the API as \code{PUBYEAR > start_year - 1}.}
 
-\item{topic_operator}{\code{"OR"}, \code{"AND"} or \code{"multi"}. See the README for how
-each mode builds the query.}
+\item{topic_operator}{How keywords in \code{search_topics} are combined. One of:
+\itemize{
+\item \code{"OR"} (default) - keywords within each topic category are joined with
+\code{OR}, e.g. \verb{("political party" OR "party decline")}.
+\item \code{"AND"} - keywords within each topic category are joined with \code{AND}
+instead.
+\item \code{"multi"} - every element of \code{search_topics} is treated as a block of
+\code{OR}-joined keywords, and the blocks are combined with \code{AND}:
+\verb{(block 1 OR-terms) AND (block 2 OR-terms) AND ...}. The resulting
+\code{query_category} is the topic names joined with \code{" & "}.
+}
 
-\item{max_pages}{Maximum pages to retrieve per query (200 records per page).}
+When \code{geo_terms} is supplied, it is combined with the topic query using
+\code{AND}. Matching is case-insensitive after trimming whitespace; any other
+value silently falls back to \code{"OR"}.}
+
+\item{max_pages}{Maximum number of pages to retrieve per query, at 200
+records per page (e.g. \code{max_pages = 5} retrieves at most 1,000 records),
+applied separately to each topic category query (or once, for the single
+combined query, in \code{"multi"} mode).}
 }
 \value{
-A tibble with one row per record.
+A tibble with one row per record and columns \code{database},
+\code{query_category}, \code{search_query}, \code{search_date}, \code{scopus_id} (always
+\code{NA}), \code{openalex_id}, \code{title}, \code{journal}, \code{publication_year}, \code{doi},
+\code{citations}, \code{abstract} and \code{authors}. Returns a zero-row tibble if no
+records are found.
 }
 \description{
 Runs one combined search per topic category (or one multi-block search) and
-returns the matching works. Uses the \code{OPENALEX_KEY} environment variable if
-set.
+returns the matching works. Unlike \code{\link[=fetch_scopus_data]{fetch_scopus_data()}}, OpenAlex is
+always queried: the \code{OPENALEX_KEY} environment variable is optional and,
+if set, is used to access OpenAlex's "polite pool" for higher rate limits;
+without it, queries still run but may be throttled more aggressively.
+HTTP 429 (rate-limit) responses are retried automatically, with an
+increasing back-off, via an internal \code{oa_fetch_retry()} wrapper.
+}
+\examples{
+\dontrun{
+fetch_openalex_data(
+  search_topics = list(party = c("political party", "party decline")),
+  geo_terms = c("Africa", "Sub-Saharan Africa"),
+  start_year = 2020,
+  topic_operator = "OR",
+  max_pages = 2
+)
+}
 }

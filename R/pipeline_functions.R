@@ -15,6 +15,9 @@
 #' own character vector to `target_journals` to use a different list.
 #'
 #' @format A character vector of journal names.
+#' @examples
+#' length(TARGET_JOURNALS)
+#' head(TARGET_JOURNALS)
 #' @export
 TARGET_JOURNALS <- c(
   # Political Science journals
@@ -263,17 +266,52 @@ parse_openalex_authors <- function(authorships_list) {
 #' Builds a `TITLE-ABS-KEY((topic keywords) AND (geo terms))` query for each
 #' topic category (or one combined query in `"multi"` mode) and returns the
 #' matching records. Requires the `ELSEVIER_SCOPUS_KEY` environment variable;
-#' Scopus is skipped if it is not set.
+#' Scopus is skipped (with a console message, returning a zero-row tibble) if
+#' it is not set.
 #'
-#' @param search_topics Named list of character vectors of keywords, one
-#'   element per topic category (or concept block in `"multi"` mode).
+#' @param search_topics Named list of character vectors of keywords. In
+#'   `"OR"`/`"AND"` mode, one element per topic category: each category is
+#'   queried separately, and the list names become the `query_category`
+#'   values in the output. In `"multi"` mode, each element is instead treated
+#'   as one concept block, and all blocks are combined into a single query
+#'   (see `topic_operator`).
 #' @param geo_terms Optional character vector of geographic terms, joined with
-#'   `OR`. `NULL` applies no geographic filter.
-#' @param start_year Earliest publication year to include.
-#' @param topic_operator `"OR"`, `"AND"` or `"multi"`. See the README for how
-#'   each mode builds the query.
-#' @param max_records Maximum records to retrieve per query.
-#' @return A tibble with one row per record.
+#'   `OR`, e.g. `("Africa" OR "Sub-Saharan Africa")`. `NULL`, or a vector with
+#'   no non-blank entries, applies no geographic filter.
+#' @param start_year Earliest publication year to include (inclusive). Sent to
+#'   the API as `PUBYEAR > start_year - 1`.
+#' @param topic_operator How keywords in `search_topics` are combined. One of:
+#'   * `"OR"` (default) - keywords within each topic category are joined with
+#'     `OR`, e.g. `("political party" OR "party decline")`.
+#'   * `"AND"` - keywords within each topic category are joined with `AND`
+#'     instead.
+#'   * `"multi"` - every element of `search_topics` is treated as a block of
+#'     `OR`-joined keywords, and the blocks are combined with `AND`:
+#'     `(block 1 OR-terms) AND (block 2 OR-terms) AND ...`. The resulting
+#'     `query_category` is the topic names joined with `" & "`.
+#'
+#'   When `geo_terms` is supplied, it is combined with the topic query using
+#'   `AND`. Matching is case-insensitive after trimming whitespace; any other
+#'   value silently falls back to `"OR"`.
+#' @param max_records Maximum number of records to retrieve, applied
+#'   separately to each topic category query (or once, for the single
+#'   combined query, in `"multi"` mode).
+#' @return A tibble with one row per record and columns `database`,
+#'   `query_category`, `search_query`, `search_date`, `scopus_id`,
+#'   `openalex_id` (always `NA`), `title`, `journal`, `publication_year`,
+#'   `doi`, `citations`, `abstract` and `authors`. Returns a zero-row tibble
+#'   if `ELSEVIER_SCOPUS_KEY` is unset or no records are found.
+#' @examples
+#' \dontrun{
+#' # Requires ELSEVIER_SCOPUS_KEY to be set in ~/.Renviron
+#' fetch_scopus_data(
+#'   search_topics = list(party = c("political party", "party decline")),
+#'   geo_terms = c("Africa", "Sub-Saharan Africa"),
+#'   start_year = 2020,
+#'   topic_operator = "OR",
+#'   max_records = 1000
+#' )
+#' }
 #' @export
 fetch_scopus_data <- function(
   search_topics,
@@ -445,12 +483,33 @@ fetch_scopus_data <- function(
 #' Query the OpenAlex API
 #'
 #' Runs one combined search per topic category (or one multi-block search) and
-#' returns the matching works. Uses the `OPENALEX_KEY` environment variable if
-#' set.
+#' returns the matching works. Unlike [fetch_scopus_data()], OpenAlex is
+#' always queried: the `OPENALEX_KEY` environment variable is optional and,
+#' if set, is used to access OpenAlex's "polite pool" for higher rate limits;
+#' without it, queries still run but may be throttled more aggressively.
+#' HTTP 429 (rate-limit) responses are retried automatically, with an
+#' increasing back-off, via an internal `oa_fetch_retry()` wrapper.
 #'
 #' @inheritParams fetch_scopus_data
-#' @param max_pages Maximum pages to retrieve per query (200 records per page).
-#' @return A tibble with one row per record.
+#' @param max_pages Maximum number of pages to retrieve per query, at 200
+#'   records per page (e.g. `max_pages = 5` retrieves at most 1,000 records),
+#'   applied separately to each topic category query (or once, for the single
+#'   combined query, in `"multi"` mode).
+#' @return A tibble with one row per record and columns `database`,
+#'   `query_category`, `search_query`, `search_date`, `scopus_id` (always
+#'   `NA`), `openalex_id`, `title`, `journal`, `publication_year`, `doi`,
+#'   `citations`, `abstract` and `authors`. Returns a zero-row tibble if no
+#'   records are found.
+#' @examples
+#' \dontrun{
+#' fetch_openalex_data(
+#'   search_topics = list(party = c("political party", "party decline")),
+#'   geo_terms = c("Africa", "Sub-Saharan Africa"),
+#'   start_year = 2020,
+#'   topic_operator = "OR",
+#'   max_pages = 2
+#' )
+#' }
 #' @export
 fetch_openalex_data <- function(
   search_topics,
@@ -627,15 +686,59 @@ fetch_openalex_data <- function(
 
 #' Deduplicate records and flag target journals
 #'
-#' Stage 1 merges records with the same cleaned DOI. Stage 2 merges records
-#' whose normalised titles have a Jaro-Winkler distance of at most 0.12 and
-#' publication years within one year of each other. Finally adds a
-#' `target_journal` column (`"Y"`/`"N"`).
+#' Collapses duplicate records across (and within) databases in two stages,
+#' then flags whether each remaining record's journal is on a curated list.
+#' When records are merged, `database`, `query_category`, `search_query` and
+#' `search_date` are concatenated across the group (so a record found by both
+#' databases, or by multiple topic searches, keeps that provenance), the
+#' longest non-empty `journal`, `abstract` and `authors` string is kept, the
+#' first non-missing `title`/`doi` is kept, and `citations` is the group
+#' maximum.
+#'
+#' * **Stage 1 (exact DOI match)**: records whose cleaned DOI (lowercased,
+#'   `doi.org`/`doi:` prefixes and trailing slashes stripped) is identical are
+#'   merged. Records with no usable DOI are left untouched at this stage.
+#' * **Stage 2 (fuzzy title match)**: among the Stage 1 output, any two
+#'   records whose cleaned titles (lowercased, punctuation stripped, extra
+#'   whitespace collapsed) have a Jaro-Winkler distance of at most `0.12`
+#'   (`stringdist::stringdistmatrix(method = "jw", p = 0.1)`) *and* whose
+#'   publication years are within 1 year of each other (or either year is
+#'   missing) are merged. This stage compares every pair of Stage 1 records,
+#'   so cost grows quadratically with their number.
+#'
+#' Finally, a `target_journal` column (`"Y"`/`"N"`) is added by comparing each
+#' record's cleaned journal name (lowercased, `&` expanded to `and`,
+#' punctuation stripped) against `target_journals`.
 #'
 #' @param df Combined output of [fetch_scopus_data()] and
-#'   [fetch_openalex_data()].
-#' @param target_journals Character vector of journal names to flag.
-#' @return A deduplicated tibble.
+#'   [fetch_openalex_data()] (or any tibble with the same `database`,
+#'   `query_category`, `search_query`, `search_date`, `scopus_id`,
+#'   `openalex_id`, `title`, `journal`, `publication_year`, `doi`,
+#'   `citations`, `abstract` and `authors` columns). Returned unchanged if it
+#'   has zero rows.
+#' @param target_journals Character vector of journal names to match against,
+#'   case- and punctuation-insensitively. Defaults to the package's
+#'   [TARGET_JOURNALS] list; pass your own vector to flag a different list of
+#'   journals instead.
+#' @return A tibble with the same columns as `df`, one row per unique record,
+#'   plus a `target_journal` column (`"Y"`/`"N"`).
+#' @examples
+#' raw <- tibble::tibble(
+#'   database = c("Scopus", "OpenAlex"),
+#'   query_category = c("party", "party"),
+#'   search_query = c("q1", "q1"),
+#'   search_date = c("2026-01-01", "2026-01-01"),
+#'   scopus_id = c("SID1", NA),
+#'   openalex_id = c(NA, "W123"),
+#'   title = c("Political Parties in Africa", "Political parties in Africa."),
+#'   journal = c("Party Politics", "Party Politics"),
+#'   publication_year = c(2021, 2021),
+#'   doi = c("10.1000/example", "10.1000/example"),
+#'   citations = c(5, 8),
+#'   abstract = c("Short.", "A longer abstract."),
+#'   authors = c("Smith, J.", "Smith, J.")
+#' )
+#' deduplicate_records(raw)
 #' @export
 deduplicate_records <- function(df, target_journals = TARGET_JOURNALS) {
   if (nrow(df) == 0) {
@@ -751,19 +854,33 @@ deduplicate_records <- function(df, target_journals = TARGET_JOURNALS) {
 
 #' Run the full scoping review pipeline
 #'
-#' Fetches records from Scopus and OpenAlex, deduplicates them, flags target
-#' journals and writes the result to a CSV file.
+#' End-to-end wrapper that calls [fetch_scopus_data()] and
+#' [fetch_openalex_data()] with the same search parameters, combines their
+#' output, deduplicates it with [deduplicate_records()], writes the result to
+#' `output_filename` as CSV, and returns it as well. Progress (records
+#' fetched per database, duplicates merged, target journal matches) is
+#' printed to the console as the pipeline runs.
 #'
 #' @inheritParams fetch_scopus_data
-#' @param max_scopus_records Maximum Scopus records to retrieve per query.
-#' @param max_openalex_pages Maximum OpenAlex pages to retrieve per query
-#'   (200 records per page).
-#' @param output_filename Path of the CSV file to write. Missing directories
-#'   are created.
-#' @return The deduplicated dataset (also written to `output_filename`).
+#' @param max_scopus_records Maximum Scopus records to retrieve per topic
+#'   category (or per combined query in `"multi"` mode). See
+#'   [fetch_scopus_data()].
+#' @param max_openalex_pages Maximum OpenAlex pages to retrieve per topic
+#'   category (or per combined query in `"multi"` mode), at 200 records per
+#'   page. See [fetch_openalex_data()].
+#' @param output_filename Path of the CSV file to write, relative to the
+#'   current working directory unless an absolute path is given. A `.csv`
+#'   extension is appended automatically if missing, and any missing parent
+#'   directories (e.g. `"outputs/"` in `"outputs/general_search.csv"`) are
+#'   created.
+#' @return The deduplicated dataset as a tibble (also written to
+#'   `output_filename`), with the columns described in
+#'   [deduplicate_records()]. Returns an empty tibble, with a console message
+#'   and without writing a file, if neither database returns any records.
 #' @export
 #' @examples
 #' \dontrun{
+#' # Requires ELSEVIER_SCOPUS_KEY and/or OPENALEX_KEY to be set in ~/.Renviron
 #' results <- run_scoping_review(
 #'   search_topics = list(party = c("political party", "party decline")),
 #'   geo_terms = c("Africa", "Sub-Saharan Africa"),

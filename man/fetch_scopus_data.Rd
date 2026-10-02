@@ -13,25 +13,63 @@ fetch_scopus_data(
 )
 }
 \arguments{
-\item{search_topics}{Named list of character vectors of keywords, one
-element per topic category (or concept block in \code{"multi"} mode).}
+\item{search_topics}{Named list of character vectors of keywords. In
+\code{"OR"}/\code{"AND"} mode, one element per topic category: each category is
+queried separately, and the list names become the \code{query_category}
+values in the output. In \code{"multi"} mode, each element is instead treated
+as one concept block, and all blocks are combined into a single query
+(see \code{topic_operator}).}
 
 \item{geo_terms}{Optional character vector of geographic terms, joined with
-\code{OR}. \code{NULL} applies no geographic filter.}
+\code{OR}, e.g. \code{("Africa" OR "Sub-Saharan Africa")}. \code{NULL}, or a vector with
+no non-blank entries, applies no geographic filter.}
 
-\item{start_year}{Earliest publication year to include.}
+\item{start_year}{Earliest publication year to include (inclusive). Sent to
+the API as \code{PUBYEAR > start_year - 1}.}
 
-\item{topic_operator}{\code{"OR"}, \code{"AND"} or \code{"multi"}. See the README for how
-each mode builds the query.}
+\item{topic_operator}{How keywords in \code{search_topics} are combined. One of:
+\itemize{
+\item \code{"OR"} (default) - keywords within each topic category are joined with
+\code{OR}, e.g. \verb{("political party" OR "party decline")}.
+\item \code{"AND"} - keywords within each topic category are joined with \code{AND}
+instead.
+\item \code{"multi"} - every element of \code{search_topics} is treated as a block of
+\code{OR}-joined keywords, and the blocks are combined with \code{AND}:
+\verb{(block 1 OR-terms) AND (block 2 OR-terms) AND ...}. The resulting
+\code{query_category} is the topic names joined with \code{" & "}.
+}
 
-\item{max_records}{Maximum records to retrieve per query.}
+When \code{geo_terms} is supplied, it is combined with the topic query using
+\code{AND}. Matching is case-insensitive after trimming whitespace; any other
+value silently falls back to \code{"OR"}.}
+
+\item{max_records}{Maximum number of records to retrieve, applied
+separately to each topic category query (or once, for the single
+combined query, in \code{"multi"} mode).}
 }
 \value{
-A tibble with one row per record.
+A tibble with one row per record and columns \code{database},
+\code{query_category}, \code{search_query}, \code{search_date}, \code{scopus_id},
+\code{openalex_id} (always \code{NA}), \code{title}, \code{journal}, \code{publication_year},
+\code{doi}, \code{citations}, \code{abstract} and \code{authors}. Returns a zero-row tibble
+if \code{ELSEVIER_SCOPUS_KEY} is unset or no records are found.
 }
 \description{
 Builds a \verb{TITLE-ABS-KEY((topic keywords) AND (geo terms))} query for each
 topic category (or one combined query in \code{"multi"} mode) and returns the
 matching records. Requires the \code{ELSEVIER_SCOPUS_KEY} environment variable;
-Scopus is skipped if it is not set.
+Scopus is skipped (with a console message, returning a zero-row tibble) if
+it is not set.
+}
+\examples{
+\dontrun{
+# Requires ELSEVIER_SCOPUS_KEY to be set in ~/.Renviron
+fetch_scopus_data(
+  search_topics = list(party = c("political party", "party decline")),
+  geo_terms = c("Africa", "Sub-Saharan Africa"),
+  start_year = 2020,
+  topic_operator = "OR",
+  max_records = 1000
+)
+}
 }
