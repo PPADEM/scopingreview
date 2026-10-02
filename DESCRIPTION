@@ -1,0 +1,28 @@
+Package: scopingreview
+Title: Automated Systematic and Scoping Literature Reviews via Scopus and OpenAlex
+Version: 0.1.0
+Authors@R:
+    person("Josh", "Tyler", email = "josh.tyler@bristol.ac.uk", role = c("aut", "cre"))
+Description: Builds Boolean search queries from topic keywords and optional
+    geographic filters, retrieves records from the Elsevier Scopus and OpenAlex
+    APIs, harmonises their metadata, removes duplicates using exact DOI and fuzzy
+    title matching, and flags papers published in a curated list of political
+    science, public administration and African studies journals.
+License: MIT + file LICENSE
+URL: https://github.com/PPADEM/scopingreview
+BugReports: https://github.com/PPADEM/scopingreview/issues
+Encoding: UTF-8
+Depends:
+    R (>= 4.1)
+Imports:
+    dplyr,
+    openalexR,
+    purrr,
+    rscopus,
+    stringdist,
+    stringr,
+    tibble,
+    stats,
+    utils
+Roxygen: list(markdown = TRUE)
+Config/roxygen2/version: 8.1.0

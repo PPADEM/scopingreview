@@ -1,0 +1,14 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+Runs/
+
+.DS
+
+/.quarto/
+**/*.quarto_ipynb
+
+outputs/
+.DS_Store
