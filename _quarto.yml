@@ -2,6 +2,7 @@ project:
   type: website
   output-dir: docs
 
+
 website:
   title: "scopingreview"
   description: "Automated systematic & scoping literature review pipeline for R, built for the PPADEM project"
