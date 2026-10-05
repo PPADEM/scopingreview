@@ -16,7 +16,7 @@ website:
     left: []
     right:
       - icon: globe
-        text: PPADEM Project
+        text: PPADEM Hub
         href: https://ppadem.github.io/
       - icon: github
         aria-label: GitHub
