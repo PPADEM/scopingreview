@@ -31,10 +31,7 @@ website:
     border: true
 
 format:
-  html:
-    theme:
-      - cosmo
-    css: styles.css
+  ppadem-theme-html:
     toc: true
     toc-depth: 3
     smooth-scroll: true
