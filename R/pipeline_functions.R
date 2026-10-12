@@ -212,30 +212,29 @@ max_str <- function(vec) {
   vec[which.max(nchar(vec))]
 }
 
-#' Safe OpenAlex API query wrapper with automated HTTP 429 retry backoff
+#' Safe OpenAlex API query wrapper with retry backoff for empty/failed calls
+#'
+#' `openalexR::oa_fetch()` already retries HTTP 429/502/503/504 responses
+#' internally and returns `NULL` (not an R error) once it gives up, so this
+#' wrapper cannot distinguish a rate limit from a genuinely empty result; it
+#' instead retries with backoff on any empty or failed call.
 #' @noRd
 oa_fetch_retry <- function(..., max_retries = 3, sleep_sec = 5.0) {
   for (attempt in seq_len(max_retries)) {
-    res <- tryCatch(
-      {
-        oa_fetch(...)
-      },
-      error = function(e) {
-        if (str_detect(e$message, "429|Too Many Requests")) {
-          wait_time <- sleep_sec * attempt
-          message(sprintf(
-            "      [OpenAlex 429 Limit] Pausing %.1f seconds before retry (Attempt %d/%d)...",
-            wait_time,
-            attempt,
-            max_retries
-          ))
-          Sys.sleep(wait_time)
-          return(NULL)
-        }
-        return(tibble())
-      }
-    )
-    if (!is.null(res) && is.data.frame(res) && nrow(res) > 0) return(res)
+    res <- tryCatch(oa_fetch(...), error = function(e) NULL)
+    if (!is.null(res) && is.data.frame(res) && nrow(res) > 0) {
+      return(res)
+    }
+    if (attempt < max_retries) {
+      wait_time <- sleep_sec * attempt
+      message(sprintf(
+        "      [OpenAlex] Empty/failed response on attempt %d/%d; pausing %.1f seconds before retry...",
+        attempt,
+        max_retries,
+        wait_time
+      ))
+      Sys.sleep(wait_time)
+    }
   }
   return(tibble())
 }
@@ -338,7 +337,7 @@ fetch_scopus_data <- function(
 
   has_geo <- !is.null(geo_terms) && length(geo_terms) > 0 && any(nchar(trimws(geo_terms)) > 0)
   if (has_geo) {
-    clean_geos <- str_replace_all(geo_terms[nchar(trimws(geo_terms)) > 0], '^"|"$', '')
+    clean_geos <- str_replace_all(geo_terms[nchar(trimws(geo_terms)) > 0], '"', '')
     geo_scopus_str <- paste(sprintf('"%s"', clean_geos), collapse = " OR ")
   }
 
@@ -346,7 +345,7 @@ fetch_scopus_data <- function(
     # Multi-block mode: combine ALL blocks in search_topics with AND, terms within each block with OR
     block_strs <- map_chr(names(search_topics), function(block_name) {
       kw_vec <- search_topics[[block_name]]
-      clean_kws <- str_replace_all(kw_vec, '^"|"$', '')
+      clean_kws <- str_replace_all(kw_vec, '"', '')
       paste0("(", paste(sprintf('"%s"', clean_kws), collapse = " OR "), ")")
     })
 
@@ -379,7 +378,8 @@ fetch_scopus_data <- function(
         res <- scopus_search(
           query = scopus_q,
           max_count = max_records,
-          count = 10,
+          count = 25,
+          view = "COMPLETE",
           verbose = FALSE
         )
         if (is.null(res$entries) || length(res$entries) == 0) {
@@ -412,7 +412,7 @@ fetch_scopus_data <- function(
   } else {
     map_dfr(names(search_topics), function(category) {
       kw_vec <- search_topics[[category]]
-      clean_kws <- str_replace_all(kw_vec, '^"|"$', '')
+      clean_kws <- str_replace_all(kw_vec, '"', '')
       kw_str <- paste(
         sprintf('"%s"', clean_kws),
         collapse = sprintf(" %s ", op)
@@ -446,7 +446,8 @@ fetch_scopus_data <- function(
           res <- scopus_search(
             query = scopus_q,
             max_count = max_records,
-            count = 10,
+            count = 25,
+            view = "COMPLETE",
             verbose = FALSE
           )
           if (is.null(res$entries) || length(res$entries) == 0) {
@@ -532,7 +533,7 @@ fetch_openalex_data <- function(
 
   has_geo <- !is.null(geo_terms) && length(geo_terms) > 0 && any(nchar(trimws(geo_terms)) > 0)
   if (has_geo) {
-    clean_geos <- str_replace_all(geo_terms[nchar(trimws(geo_terms)) > 0], '^"|"$', '')
+    clean_geos <- str_replace_all(geo_terms[nchar(trimws(geo_terms)) > 0], '"', '')
     geo_or_str <- paste(sprintf('"%s"', clean_geos), collapse = " OR ")
   }
 
@@ -540,7 +541,7 @@ fetch_openalex_data <- function(
     # Multi-block mode: combine ALL blocks in search_topics with AND, terms within each block with OR
     block_strs <- map_chr(names(search_topics), function(block_name) {
       kw_vec <- search_topics[[block_name]]
-      clean_kws <- str_replace_all(kw_vec, '^"|"$', '')
+      clean_kws <- str_replace_all(kw_vec, '"', '')
       paste0("(", paste(sprintf('"%s"', clean_kws), collapse = " OR "), ")")
     })
 
@@ -559,8 +560,7 @@ fetch_openalex_data <- function(
       entity = "works",
       search = query_str,
       from_publication_date = sprintf("%d-01-01", start_year),
-      pages = 1:max_pages,
-      per_page = 200,
+      options = oa_options(pages = 1:max_pages, per_page = 200),
       api_key = oa_key,
       verbose = FALSE
     )
@@ -610,7 +610,7 @@ fetch_openalex_data <- function(
   } else {
     map_dfr(names(search_topics), function(category) {
       kw_vec <- search_topics[[category]]
-      clean_kws <- str_replace_all(kw_vec, '^"|"$', '')
+      clean_kws <- str_replace_all(kw_vec, '"', '')
       cat(sprintf(
         "   -> [OpenAlex] Querying topic category: %s [Topic Op: %s] (max pages: %d, 200 items/page)\n",
         category,
@@ -630,8 +630,7 @@ fetch_openalex_data <- function(
         entity = "works",
         search = query_str,
         from_publication_date = sprintf("%d-01-01", start_year),
-        pages = 1:max_pages,
-        per_page = 200,
+        options = oa_options(pages = 1:max_pages, per_page = 200),
         api_key = oa_key,
         verbose = FALSE
       )
@@ -787,7 +786,23 @@ deduplicate_records <- function(df, target_journals = TARGET_JOURNALS) {
       method = "jw",
       p = 0.1
     )
-    dup_group <- seq_len(n)
+
+    # Union-find (with path compression) so that chains of pairwise matches
+    # (A~B, B~C) are merged transitively without a later match overwriting
+    # and discarding an earlier, equally valid direct match (e.g. A~C).
+    parent <- seq_len(n)
+    find_root <- function(x) {
+      while (parent[x] != x) {
+        parent[x] <<- parent[parent[x]]
+        x <- parent[x]
+      }
+      x
+    }
+    union_groups <- function(a, b) {
+      ra <- find_root(a)
+      rb <- find_root(b)
+      if (ra != rb) parent[ra] <<- rb
+    }
 
     for (i in seq_len(n - 1)) {
       for (j in (i + 1):n) {
@@ -795,11 +810,11 @@ deduplicate_records <- function(df, target_journals = TARGET_JOURNALS) {
         y_j <- candidates$publication_year[j]
         same_year <- is.na(y_i) || is.na(y_j) || abs(y_i - y_j) <= 1
         if (!is.na(dist_mat[i, j]) && dist_mat[i, j] <= 0.12 && same_year) {
-          dup_group[j] <- dup_group[i]
+          union_groups(i, j)
         }
       }
     }
-    candidates$dup_group <- dup_group
+    candidates$dup_group <- vapply(seq_len(n), find_root, integer(1))
   } else {
     candidates$dup_group <- 1
   }

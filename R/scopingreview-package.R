@@ -3,7 +3,7 @@
 
 #' @importFrom dplyr %>% bind_rows coalesce distinct filter first group_by
 #'   mutate select summarise
-#' @importFrom openalexR oa_fetch
+#' @importFrom openalexR oa_fetch oa_options
 #' @importFrom purrr %||% map_chr map_dfr
 #' @importFrom rscopus scopus_search set_api_key
 #' @importFrom stats na.omit

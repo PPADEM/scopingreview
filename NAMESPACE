@@ -17,7 +17,7 @@ importFrom(dplyr,
   select,
   summarise
 )
-importFrom(openalexR,oa_fetch)
+importFrom(openalexR,oa_fetch,oa_options)
 importFrom(purrr,
   "%||%",
   map_chr,

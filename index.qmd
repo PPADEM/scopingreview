@@ -30,7 +30,7 @@ This pipeline automates the labor-intensive initial stages of a systematic liter
 2. **Queries Scopus & OpenAlex**: Programmatically retrieves academic publications, handling pagination and rate limits automatically.
 3. **Harmonizes Metadata**: Standardizes schemas across both databases into a single clean format.
 4. **Performs 2-Stage Deduplication**: Merges duplicate papers across databases using exact DOI matching and fuzzy title string matching.
-5. **Flags Curated Target Journals**: Automatically checks each paper's journal against a reference list of ~121 top Political Science, Administrative, and Area/African Studies journals and flags them (`Y` / `N`) in a dedicated column.
+5. **Flags Curated Target Journals**: Automatically checks each paper's journal against a reference list of 137 top Political Science, Administrative, and Area/African Studies journals and flags them (`Y` / `N`) in a dedicated column.
 6. **Exports Customizable Datasets**: Saves structured CSV datasets directly to root or to custom subfolder paths specified in `output_filename`.
 
 ## 🔍 How the Search Logic Works
