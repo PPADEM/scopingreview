@@ -19,7 +19,7 @@ GEO_TERMS <- c(
 )
 START_YEAR <- 2020
 MAX_SCOPUS_RECORDS <- 5000 # Maximum records to retrieve per topic from Scopus
-MAX_OPENALEX_PAGES <- 10 # Maximum pages (200 records/page = 1,000 items) from OpenAlex
+MAX_OPENALEX_PAGES <- 10 # Maximum pages (200 records/page = 2,000 items) from OpenAlex
 
 #### 3. RUN 1: General Broad Search (using OR - saved at root) ####
 GENERAL_TOPICS <- list(

@@ -36,7 +36,7 @@ maximum.
 \details{
 \itemize{
 \item \strong{Stage 1 (exact DOI match)}: records whose cleaned DOI (lowercased,
-\code{doi.org}/\code{doi:} prefixes and trailing slashes stripped) is identical are
+\code{doi.org}/\verb{doi:} prefixes and trailing slashes stripped) is identical are
 merged. Records with no usable DOI are left untouched at this stage.
 \item \strong{Stage 2 (fuzzy title match)}: among the Stage 1 output, any two
 records whose cleaned titles (lowercased, punctuation stripped, extra

@@ -11,3 +11,6 @@
 ^images$
 ^_site$
 ^\.github$
+^docs$
+^_extensions$
+^.*\.csv$

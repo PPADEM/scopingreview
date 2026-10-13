@@ -212,19 +212,55 @@ max_str <- function(vec) {
   vec[which.max(nchar(vec))]
 }
 
-#' Safe OpenAlex API query wrapper with retry backoff for empty/failed calls
+#' Safe OpenAlex API query wrapper with retry backoff and duplicate-field fix
 #'
 #' `openalexR::oa_fetch()` already retries HTTP 429/502/503/504 responses
-#' internally and returns `NULL` (not an R error) once it gives up, so this
-#' wrapper cannot distinguish a rate limit from a genuinely empty result; it
-#' instead retries with backoff on any empty or failed call.
+#' internally. However, upstream openalexR (<= 3.1.1) fails when OpenAlex
+#' includes `doi` inside `primary_location`, causing `Column name doi must not be duplicated`.
+#' To prevent this, we fetch with `output = "list"`, remove duplicate `doi` from
+#' `primary_location`, and convert via `openalexR::oa2df()`.
+#' Also catches "No records found!" warning on genuinely empty searches to avoid
+#' needless retry sleep cycles.
 #' @noRd
 oa_fetch_retry <- function(..., max_retries = 3, sleep_sec = 5.0) {
   for (attempt in seq_len(max_retries)) {
-    res <- tryCatch(oa_fetch(...), error = function(e) NULL)
+    is_not_found <- FALSE
+    res <- withCallingHandlers(
+      tryCatch(
+        {
+          raw_list <- oa_fetch(..., output = "list")
+          if (is.null(raw_list) || length(raw_list) == 0) {
+            NULL
+          } else {
+            cleaned_list <- lapply(raw_list, function(paper) {
+              if (is.list(paper$primary_location)) {
+                paper$primary_location$doi <- NULL
+              }
+              paper
+            })
+            oa2df(cleaned_list, entity = "works")
+          }
+        },
+        error = function(e) {
+          # Fallback to standard oa_fetch in case output = "list" or oa2df is unavailable
+          tryCatch(oa_fetch(...), error = function(e2) NULL)
+        }
+      ),
+      warning = function(w) {
+        if (grepl("No records found", w$message, ignore.case = TRUE)) {
+          is_not_found <<- TRUE
+        }
+      }
+    )
+
+    if (is_not_found) {
+      return(tibble())
+    }
+
     if (!is.null(res) && is.data.frame(res) && nrow(res) > 0) {
       return(res)
     }
+
     if (attempt < max_retries) {
       wait_time <- sleep_sec * attempt
       message(sprintf(
@@ -292,6 +328,11 @@ parse_openalex_authors <- function(authorships_list) {
 #'   When `geo_terms` is supplied, it is combined with the topic query using
 #'   `AND`. Matching is case-insensitive after trimming whitespace; any other
 #'   value silently falls back to `"OR"`.
+#' @param view Which Scopus search view to request. One of `"STANDARD"`
+#'   (default) or `"COMPLETE"`. Standard developer API keys are only
+#'   entitled to `"STANDARD"`; requesting `"COMPLETE"` without institutional
+#'   entitlements will result in an authorization error, which this function
+#'   catches to fall back gracefully to `"STANDARD"`.
 #' @param max_records Maximum number of records to retrieve, applied
 #'   separately to each topic category query (or once, for the single
 #'   combined query, in `"multi"` mode).
@@ -317,7 +358,8 @@ fetch_scopus_data <- function(
   geo_terms = NULL,
   start_year = 2020,
   topic_operator = "OR",
-  max_records = 5000
+  max_records = 5000,
+  view = "STANDARD"
 ) {
   sc_key <- Sys.getenv("ELSEVIER_SCOPUS_KEY")
   if (sc_key == "") {
@@ -335,10 +377,68 @@ fetch_scopus_data <- function(
     op <- "OR"
   }
 
+  view_mode <- toupper(trimws(view))
+  if (!view_mode %in% c("STANDARD", "COMPLETE")) {
+    view_mode <- "STANDARD"
+  }
+
   has_geo <- !is.null(geo_terms) && length(geo_terms) > 0 && any(nchar(trimws(geo_terms)) > 0)
   if (has_geo) {
     clean_geos <- str_replace_all(geo_terms[nchar(trimws(geo_terms)) > 0], '"', '')
     geo_scopus_str <- paste(sprintf('"%s"', clean_geos), collapse = " OR ")
+  }
+
+  run_scopus_query <- function(scopus_q, category_name) {
+    res <- tryCatch(
+      scopus_search(
+        query = scopus_q,
+        max_count = max_records,
+        count = 25,
+        view = view_mode,
+        verbose = FALSE
+      ),
+      error = function(e) {
+        if (view_mode == "COMPLETE" && grepl("401|unauthorized|AUTHORIZATION", e$message, ignore.case = TRUE)) {
+          message("   -> [Scopus] 'COMPLETE' view unauthorized for this API key; falling back to 'STANDARD' view.")
+          return(tryCatch(
+            scopus_search(
+              query = scopus_q,
+              max_count = max_records,
+              count = 25,
+              view = "STANDARD",
+              verbose = FALSE
+            ),
+            error = function(e2) NULL
+          ))
+        }
+        NULL
+      }
+    )
+
+    if (is.null(res) || is.null(res$entries) || length(res$entries) == 0) {
+      return(tibble())
+    }
+
+    map_dfr(res$entries, function(x) {
+      tibble(
+        database = "Scopus",
+        query_category = category_name,
+        search_query = scopus_q,
+        search_date = run_date,
+        scopus_id = x$`dc:identifier` %||% NA_character_,
+        openalex_id = NA_character_,
+        title = x$`dc:title` %||% NA_character_,
+        journal = x$`prism:publicationName` %||% "Unknown Journal",
+        publication_year = as.integer(str_extract(
+          x$`prism:coverDate` %||% "",
+          "^[0-9]{4}"
+        )),
+        doi = x$`prism:doi` %||% NA_character_,
+        citations = as.numeric(x$`citedby-count` %||% 0),
+        abstract = x$`prism:description` %||% "",
+        authors = x$`dc:creator` %||% "Unknown Author"
+      )
+    })
   }
 
   if (op == "MULTI") {
@@ -373,42 +473,7 @@ fetch_scopus_data <- function(
     ))
     Sys.sleep(0.3)
 
-    tryCatch(
-      {
-        res <- scopus_search(
-          query = scopus_q,
-          max_count = max_records,
-          count = 25,
-          view = "COMPLETE",
-          verbose = FALSE
-        )
-        if (is.null(res$entries) || length(res$entries) == 0) {
-          return(tibble())
-        }
-
-        map_dfr(res$entries, function(x) {
-          tibble(
-            database = "Scopus",
-            query_category = category_name,
-            search_query = scopus_q,
-            search_date = run_date,
-            scopus_id = x$`dc:identifier` %||% NA_character_,
-            openalex_id = NA_character_,
-            title = x$`dc:title` %||% NA_character_,
-            journal = x$`prism:publicationName` %||% "Unknown Journal",
-            publication_year = as.integer(str_extract(
-              x$`prism:coverDate` %||% "",
-              "^\\d{4}"
-            )),
-            doi = x$`prism:doi` %||% NA_character_,
-            citations = as.numeric(x$`citedby-count` %||% 0),
-            abstract = x$`prism:description` %||% "",
-            authors = x$`dc:creator` %||% "Unknown Author"
-          )
-        })
-      },
-      error = function(e) tibble()
-    )
+    run_scopus_query(scopus_q, category_name)
   } else {
     map_dfr(names(search_topics), function(category) {
       kw_vec <- search_topics[[category]]
@@ -441,42 +506,7 @@ fetch_scopus_data <- function(
       ))
       Sys.sleep(0.3)
 
-      tryCatch(
-        {
-          res <- scopus_search(
-            query = scopus_q,
-            max_count = max_records,
-            count = 25,
-            view = "COMPLETE",
-            verbose = FALSE
-          )
-          if (is.null(res$entries) || length(res$entries) == 0) {
-            return(tibble())
-          }
-
-          map_dfr(res$entries, function(x) {
-            tibble(
-              database = "Scopus",
-              query_category = category,
-              search_query = scopus_q,
-              search_date = run_date,
-              scopus_id = x$`dc:identifier` %||% NA_character_,
-              openalex_id = NA_character_,
-              title = x$`dc:title` %||% NA_character_,
-              journal = x$`prism:publicationName` %||% "Unknown Journal",
-              publication_year = as.integer(str_extract(
-                x$`prism:coverDate` %||% "",
-                "^\\d{4}"
-              )),
-              doi = x$`prism:doi` %||% NA_character_,
-              citations = as.numeric(x$`citedby-count` %||% 0),
-              abstract = x$`prism:description` %||% "",
-              authors = x$`dc:creator` %||% "Unknown Author"
-            )
-          })
-        },
-        error = function(e) tibble()
-      )
+      run_scopus_query(scopus_q, category)
     })
   }
 }
@@ -883,6 +913,8 @@ deduplicate_records <- function(df, target_journals = TARGET_JOURNALS) {
 #' @param max_openalex_pages Maximum OpenAlex pages to retrieve per topic
 #'   category (or per combined query in `"multi"` mode), at 200 records per
 #'   page. See [fetch_openalex_data()].
+#' @param scopus_view Which Scopus search view to request (`"STANDARD"` or
+#'   `"COMPLETE"`). Defaults to `"STANDARD"`. See [fetch_scopus_data()].
 #' @param output_filename Path of the CSV file to write, relative to the
 #'   current working directory unless an absolute path is given. A `.csv`
 #'   extension is appended automatically if missing, and any missing parent
@@ -911,6 +943,7 @@ run_scoping_review <- function(
   topic_operator = "OR",
   max_scopus_records = 5000,
   max_openalex_pages = 5,
+  scopus_view = "STANDARD",
   output_filename = "scoping_review_dataset.csv"
 ) {
   # Ensure filename ends with .csv extension
@@ -935,7 +968,8 @@ run_scoping_review <- function(
     geo_terms,
     start_year,
     topic_operator = topic_operator,
-    max_records = max_scopus_records
+    max_records = max_scopus_records,
+    view = scopus_view
   )
   openalex_raw <- fetch_openalex_data(
     search_topics,

@@ -1,6 +1,6 @@
 Package: scopingreview
 Title: Automated Systematic and Scoping Literature Reviews via Scopus and OpenAlex
-Version: 0.1.0
+Version: 0.2.0
 Authors@R:
     person("Josh", "Tyler", email = "josh.tyler@bristol.ac.uk", role = c("aut", "cre"))
 Description: Builds Boolean search queries from topic keywords and optional
@@ -25,4 +25,4 @@ Imports:
     stats,
     utils
 Roxygen: list(markdown = TRUE)
-Config/roxygen2/version: 8.1.0
+Config/roxygen2/version: 8.0.0

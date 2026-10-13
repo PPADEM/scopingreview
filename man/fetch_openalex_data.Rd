@@ -21,7 +21,7 @@ as one concept block, and all blocks are combined into a single query
 (see \code{topic_operator}).}
 
 \item{geo_terms}{Optional character vector of geographic terms, joined with
-\code{OR}, e.g. \code{("Africa" OR "Sub-Saharan Africa")}. \code{NULL}, or a vector with
+\code{OR}, e.g. \verb{("Africa" OR "Sub-Saharan Africa")}. \code{NULL}, or a vector with
 no non-blank entries, applies no geographic filter.}
 
 \item{start_year}{Earliest publication year to include (inclusive). Sent to

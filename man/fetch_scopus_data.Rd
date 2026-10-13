@@ -9,7 +9,8 @@ fetch_scopus_data(
   geo_terms = NULL,
   start_year = 2020,
   topic_operator = "OR",
-  max_records = 5000
+  max_records = 5000,
+  view = "STANDARD"
 )
 }
 \arguments{
@@ -21,7 +22,7 @@ as one concept block, and all blocks are combined into a single query
 (see \code{topic_operator}).}
 
 \item{geo_terms}{Optional character vector of geographic terms, joined with
-\code{OR}, e.g. \code{("Africa" OR "Sub-Saharan Africa")}. \code{NULL}, or a vector with
+\code{OR}, e.g. \verb{("Africa" OR "Sub-Saharan Africa")}. \code{NULL}, or a vector with
 no non-blank entries, applies no geographic filter.}
 
 \item{start_year}{Earliest publication year to include (inclusive). Sent to
@@ -46,6 +47,12 @@ value silently falls back to \code{"OR"}.}
 \item{max_records}{Maximum number of records to retrieve, applied
 separately to each topic category query (or once, for the single
 combined query, in \code{"multi"} mode).}
+
+\item{view}{Which Scopus search view to request. One of \code{"STANDARD"}
+(default) or \code{"COMPLETE"}. Standard developer API keys are only
+entitled to \code{"STANDARD"}; requesting \code{"COMPLETE"} without institutional
+entitlements will result in an authorization error, which this function
+catches to fall back gracefully to \code{"STANDARD"}.}
 }
 \value{
 A tibble with one row per record and columns \code{database},

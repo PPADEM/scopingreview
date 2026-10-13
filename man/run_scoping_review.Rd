@@ -11,6 +11,7 @@ run_scoping_review(
   topic_operator = "OR",
   max_scopus_records = 5000,
   max_openalex_pages = 5,
+  scopus_view = "STANDARD",
   output_filename = "scoping_review_dataset.csv"
 )
 }
@@ -23,7 +24,7 @@ as one concept block, and all blocks are combined into a single query
 (see \code{topic_operator}).}
 
 \item{geo_terms}{Optional character vector of geographic terms, joined with
-\code{OR}, e.g. \code{("Africa" OR "Sub-Saharan Africa")}. \code{NULL}, or a vector with
+\code{OR}, e.g. \verb{("Africa" OR "Sub-Saharan Africa")}. \code{NULL}, or a vector with
 no non-blank entries, applies no geographic filter.}
 
 \item{start_year}{Earliest publication year to include (inclusive). Sent to
@@ -52,6 +53,9 @@ category (or per combined query in \code{"multi"} mode). See
 \item{max_openalex_pages}{Maximum OpenAlex pages to retrieve per topic
 category (or per combined query in \code{"multi"} mode), at 200 records per
 page. See \code{\link[=fetch_openalex_data]{fetch_openalex_data()}}.}
+
+\item{scopus_view}{Which Scopus search view to request (\code{"STANDARD"} or
+\code{"COMPLETE"}). Defaults to \code{"STANDARD"}. See \code{\link[=fetch_scopus_data]{fetch_scopus_data()}}.}
 
 \item{output_filename}{Path of the CSV file to write, relative to the
 current working directory unless an absolute path is given. A \code{.csv}

@@ -1,15 +1,13 @@
 #' @keywords internal
 "_PACKAGE"
 
-#' @importFrom dplyr %>% bind_rows coalesce distinct filter first group_by
-#'   mutate select summarise
-#' @importFrom openalexR oa_fetch oa_options
+#' @importFrom dplyr %>% bind_rows coalesce distinct filter first group_by mutate select summarise
+#' @importFrom openalexR oa2df oa_fetch oa_options
 #' @importFrom purrr %||% map_chr map_dfr
 #' @importFrom rscopus scopus_search set_api_key
 #' @importFrom stats na.omit
 #' @importFrom stringdist stringdistmatrix
-#' @importFrom stringr str_detect str_extract str_remove str_replace_all
-#'   str_split str_trim
+#' @importFrom stringr str_detect str_extract str_remove str_replace_all str_split str_trim
 #' @importFrom tibble tibble
 #' @importFrom utils write.csv
 NULL
