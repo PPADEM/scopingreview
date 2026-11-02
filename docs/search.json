@@ -11,7 +11,7 @@
     "href": "index.html#what-this-tool-does",
     "title": "\nscopingreview\n",
     "section": "🎯 What This Tool Does",
-    "text": "🎯 What This Tool Does\nThis pipeline automates the labor-intensive initial stages of a systematic literature review:\n\nConstructs Boolean API Queries: Combines your thematic search keywords and geographic filters using precise boolean logic across both Scopus and OpenAlex, supporting single-category (OR / AND) or multi-block (multi) search modes.\nQueries Scopus & OpenAlex: Programmatically retrieves academic publications, handling pagination and rate limits automatically.\nHarmonizes Metadata: Standardizes schemas across both databases into a single clean format.\nPerforms 2-Stage Deduplication: Merges duplicate papers across databases using exact DOI matching and fuzzy title string matching.\nFlags Curated Target Journals: Automatically checks each paper’s journal against a reference list of ~121 top Political Science, Administrative, and Area/African Studies journals and flags them (Y / N) in a dedicated column.\nExports Customizable Datasets: Saves structured CSV datasets directly to root or to custom subfolder paths specified in output_filename."
+    "text": "🎯 What This Tool Does\nThis pipeline automates the labor-intensive initial stages of a systematic literature review:\n\nConstructs Boolean API Queries: Combines your thematic search keywords and geographic filters using precise boolean logic across both Scopus and OpenAlex, supporting single-category (OR / AND) or multi-block (multi) search modes.\nQueries Scopus & OpenAlex: Programmatically retrieves academic publications, handling pagination and rate limits automatically.\nHarmonizes Metadata: Standardizes schemas across both databases into a single clean format.\nPerforms 2-Stage Deduplication: Merges duplicate papers across databases using exact DOI matching and fuzzy title string matching.\nFlags Curated Target Journals: Automatically checks each paper’s journal against a reference list of 137 top Political Science, Administrative, and Area/African Studies journals and flags them (Y / N) in a dedicated column.\nExports Customizable Datasets: Saves structured CSV datasets directly to root or to custom subfolder paths specified in output_filename."
   },
   {
     "objectID": "index.html#how-the-search-logic-works",
@@ -54,5 +54,26 @@
     "title": "MIT License",
     "section": "",
     "text": "MIT License\nCopyright (c) 2026 scopingreview authors\nPermission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\nThe above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.\nTHE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE."
+  },
+  {
+    "objectID": "NEWS.html",
+    "href": "NEWS.html",
+    "title": "scopingreview 0.2.0",
+    "section": "",
+    "text": "OpenAlex compatibility: Fixed a critical failure where upstream schema changes in OpenAlex (adding doi inside primary_location) caused openalexR (&lt;= 3.1.1) to crash with Column name 'doi' must not be duplicated. Queries now fetch via output = \"list\", sanitize nested duplicate fields, and convert safely via oa2df().\nScopus view authorization: Added scopus_view parameter (defaulting to \"STANDARD\") to fetch_scopus_data() and run_scoping_review(). If \"COMPLETE\" view is requested with an API key lacking institutional entitlement, the pipeline now logs an informative message and falls back gracefully to \"STANDARD\" instead of failing with HTTP 401 Unauthorized.\nOpenAlex empty search handling: Genuinely empty search results (signaled by \"No records found!\") no longer trigger multiple redundant backoff retry sleep cycles.\n\n\n\n\n\nPortability & R CMD check: Added ^docs$ and ^_extensions$ to .Rbuildignore so Quarto website assets and presentation extensions do not cause file path length or non-portable name warnings during package builds.\nTransitive deduplication: Refined Stage 2 fuzzy title deduplication to use union-find with path compression for consistent transitive grouping."
+  },
+  {
+    "objectID": "NEWS.html#bug-fixes-api-resilience",
+    "href": "NEWS.html#bug-fixes-api-resilience",
+    "title": "scopingreview 0.2.0",
+    "section": "",
+    "text": "OpenAlex compatibility: Fixed a critical failure where upstream schema changes in OpenAlex (adding doi inside primary_location) caused openalexR (&lt;= 3.1.1) to crash with Column name 'doi' must not be duplicated. Queries now fetch via output = \"list\", sanitize nested duplicate fields, and convert safely via oa2df().\nScopus view authorization: Added scopus_view parameter (defaulting to \"STANDARD\") to fetch_scopus_data() and run_scoping_review(). If \"COMPLETE\" view is requested with an API key lacking institutional entitlement, the pipeline now logs an informative message and falls back gracefully to \"STANDARD\" instead of failing with HTTP 401 Unauthorized.\nOpenAlex empty search handling: Genuinely empty search results (signaled by \"No records found!\") no longer trigger multiple redundant backoff retry sleep cycles."
+  },
+  {
+    "objectID": "NEWS.html#packaging-build-improvements",
+    "href": "NEWS.html#packaging-build-improvements",
+    "title": "scopingreview 0.2.0",
+    "section": "",
+    "text": "Portability & R CMD check: Added ^docs$ and ^_extensions$ to .Rbuildignore so Quarto website assets and presentation extensions do not cause file path length or non-portable name warnings during package builds.\nTransitive deduplication: Refined Stage 2 fuzzy title deduplication to use union-find with path compression for consistent transitive grouping."
   }
 ]

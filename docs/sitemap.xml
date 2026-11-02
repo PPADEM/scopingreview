@@ -2,10 +2,14 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://ppadem.github.io/scopingreview/index.html</loc>
-    <lastmod>2026-10-02T10:07:56.043Z</lastmod>
+    <lastmod>2026-10-12T15:48:32.620Z</lastmod>
   </url>
   <url>
     <loc>https://ppadem.github.io/scopingreview/LICENSE.html</loc>
     <lastmod>2026-10-02T10:07:56.042Z</lastmod>
+  </url>
+  <url>
+    <loc>https://ppadem.github.io/scopingreview/NEWS.html</loc>
+    <lastmod>2026-10-13T09:07:56.153Z</lastmod>
   </url>
 </urlset>
