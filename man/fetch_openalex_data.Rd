@@ -9,7 +9,8 @@ fetch_openalex_data(
   geo_terms = NULL,
   start_year = 2020,
   topic_operator = "OR",
-  max_pages = 5
+  max_pages = 5,
+  openalex_scope = c("title_abstract", "fulltext")
 )
 }
 \arguments{
@@ -47,10 +48,18 @@ value silently falls back to \code{"OR"}.}
 records per page (e.g. \code{max_pages = 5} retrieves at most 1,000 records),
 capped at 50 (OpenAlex basic paging stops at 10,000 results), applied separately to each topic category query (or once, for the single
 combined query, in \code{"multi"} mode).}
+
+\item{openalex_scope}{Which fields OpenAlex searches. \code{"title_abstract"}
+(the default) uses OpenAlex's \code{title_and_abstract.search} filter, so
+results are comparable to Scopus's \code{TITLE-ABS-KEY}. \code{"fulltext"} uses
+OpenAlex's general \code{search} parameter, which also matches full text and
+stems terms; it returns many more records, most of them irrelevant, and
+is much slower. Changing this changes which records the review finds.}
 }
 \value{
 A tibble with one row per record and columns \code{database},
-\code{query_category}, \code{search_query}, \code{search_date}, \code{scopus_id} (always
+\code{query_category}, \code{search_query} (prefixed with the OpenAlex parameter
+used, e.g. \verb{title_and_abstract.search:}), \code{search_date}, \code{scopus_id} (always
 \code{NA}), \code{openalex_id}, \code{title}, \code{journal}, \code{publication_year}, \code{doi},
 \code{citations}, \code{abstract} and \code{authors}. Returns a zero-row tibble if no
 records are found.

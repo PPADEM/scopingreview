@@ -1,5 +1,11 @@
 # scopingreview (development)
 
+## Breaking change: OpenAlex now searches title and abstract only
+* `fetch_openalex_data()` and `run_scoping_review()` gain `openalex_scope`, defaulting to `"title_abstract"`. OpenAlex is now queried with the `title_and_abstract.search` filter, which matches the scope of Scopus's `TITLE-ABS-KEY`. Previously OpenAlex used `search=`, which also matches full text and stems terms. That returned far more records than Scopus, mostly irrelevant ones (9 vs 16,895 in one run), and made heavy queries slow. `openalex_scope = "fulltext"` restores the old behaviour. **This changes which records a review finds. Results from earlier versions are not comparable.**
+* OpenAlex `search_query` values are prefixed with the parameter used (`title_and_abstract.search:` or `search:`), so the CSV shows how each record was found.
+* Commas in search terms are replaced with spaces in title-and-abstract mode, because OpenAlex uses commas to separate filters.
+* The end-of-run summary warns when one database returns more than 100 times as many records as the other.
+
 ## New features
 * `run_scoping_review()` gains `max_query_chars` (default 1400). In `"multi"` mode, term lists (and geographic terms) are split until every query fits OpenAlex's 1,500-character limit; all combinations are run, merged and deduplicated once. New exported `chunk_search_topics()` previews the split.
 * The final banner now reports records and failed requests per database, and warns instead of reporting success when a database contributes nothing.

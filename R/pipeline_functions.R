@@ -629,6 +629,43 @@ fetch_scopus_data <- function(
   }
 }
 
+#' OpenAlex filter name for each search scope
+#'
+#' `"title_abstract"` uses the `title_and_abstract.search` filter, which
+#' matches title and abstract only (comparable to Scopus `TITLE-ABS-KEY`).
+#' `"fulltext"` uses the top-level `search` parameter, which also matches
+#' full text and returns far more (mostly irrelevant) records.
+#' @noRd
+oa_scope_param <- function(scope) {
+  switch(scope, title_abstract = "title_and_abstract.search", fulltext = "search")
+}
+
+#' Arguments to pass to oa_fetch() for a query in the given scope
+#' @noRd
+oa_search_args <- function(query_str, scope) {
+  stats::setNames(list(query_str), oa_scope_param(scope))
+}
+
+#' Remove characters that break an OpenAlex filter value
+#'
+#' OpenAlex separates filters with commas, so a comma inside a
+#' `title_and_abstract.search` value would cut the query short. Commas are
+#' replaced with spaces (OpenAlex ignores punctuation inside phrases anyway).
+#' @noRd
+oa_clean_query <- function(query_str, scope) {
+  if (scope == "fulltext" || !grepl(",", query_str, fixed = TRUE)) {
+    return(query_str)
+  }
+  message("[OpenAlex] Commas in search terms were replaced with spaces (commas separate OpenAlex filters).")
+  trimws(gsub("\\s+", " ", gsub(",", " ", query_str, fixed = TRUE)))
+}
+
+#' `search_query` value recording how an OpenAlex record was found
+#' @noRd
+oa_query_label <- function(query_str, scope) {
+  paste0(oa_scope_param(scope), ":", query_str)
+}
+
 #' Query the OpenAlex API
 #'
 #' Runs one combined search per topic category (or one multi-block search) and
@@ -647,8 +684,15 @@ fetch_scopus_data <- function(
 #'   records per page (e.g. `max_pages = 5` retrieves at most 1,000 records),
 #'   capped at 50 (OpenAlex basic paging stops at 10,000 results), applied separately to each topic category query (or once, for the single
 #'   combined query, in `"multi"` mode).
+#' @param openalex_scope Which fields OpenAlex searches. `"title_abstract"`
+#'   (the default) uses OpenAlex's `title_and_abstract.search` filter, so
+#'   results are comparable to Scopus's `TITLE-ABS-KEY`. `"fulltext"` uses
+#'   OpenAlex's general `search` parameter, which also matches full text and
+#'   stems terms; it returns many more records, most of them irrelevant, and
+#'   is much slower. Changing this changes which records the review finds.
 #' @return A tibble with one row per record and columns `database`,
-#'   `query_category`, `search_query`, `search_date`, `scopus_id` (always
+#'   `query_category`, `search_query` (prefixed with the OpenAlex parameter
+#'   used, e.g. `title_and_abstract.search:`), `search_date`, `scopus_id` (always
 #'   `NA`), `openalex_id`, `title`, `journal`, `publication_year`, `doi`,
 #'   `citations`, `abstract` and `authors`. Returns a zero-row tibble if no
 #'   records are found.
@@ -668,8 +712,10 @@ fetch_openalex_data <- function(
   geo_terms = NULL,
   start_year = 2020,
   topic_operator = "OR",
-  max_pages = 5
+  max_pages = 5,
+  openalex_scope = c("title_abstract", "fulltext")
 ) {
+  openalex_scope <- match.arg(openalex_scope)
   oa_key <- Sys.getenv("OPENALEX_KEY")
   if (oa_key != "") {
     options(openalexR.apikey = oa_key)
@@ -703,6 +749,7 @@ fetch_openalex_data <- function(
 
     combined_topic_str <- paste(block_strs, collapse = " AND ")
     query_str <- if (has_geo) sprintf('(%s) AND (%s)', combined_topic_str, geo_or_str) else combined_topic_str
+    query_str <- oa_clean_query(query_str, openalex_scope)
     category_name <- paste(names(search_topics), collapse = " & ")
 
     cat(sprintf(
@@ -712,12 +759,13 @@ fetch_openalex_data <- function(
     ))
     Sys.sleep(0.3)
 
-    block_res <- oa_fetch_pages(
-      max_pages,
-      oa_key,
-      entity = "works",
-      search = query_str,
-      from_publication_date = sprintf("%d-01-01", start_year)
+    block_res <- do.call(
+      oa_fetch_pages,
+      c(
+        list(max_pages, oa_key, entity = "works"),
+        oa_search_args(query_str, openalex_scope),
+        list(from_publication_date = sprintf("%d-01-01", start_year))
+      )
     )
 
     if (is.null(block_res) || nrow(block_res) == 0) {
@@ -731,7 +779,7 @@ fetch_openalex_data <- function(
       mutate(
         database = "OpenAlex",
         query_category = category_name,
-        search_query = query_str,
+        search_query = oa_query_label(query_str, openalex_scope),
         search_date = run_date,
         scopus_id = NA_character_,
         openalex_id = id,
@@ -778,15 +826,17 @@ fetch_openalex_data <- function(
         collapse = sprintf(" %s ", op)
       )
       query_str <- if (has_geo) sprintf('(%s) AND (%s)', kw_str, geo_or_str) else kw_str
+      query_str <- oa_clean_query(query_str, openalex_scope)
 
       Sys.sleep(0.3)
 
-      block_res <- oa_fetch_pages(
-        max_pages,
-        oa_key,
-        entity = "works",
-        search = query_str,
-        from_publication_date = sprintf("%d-01-01", start_year)
+      block_res <- do.call(
+        oa_fetch_pages,
+        c(
+          list(max_pages, oa_key, entity = "works"),
+          oa_search_args(query_str, openalex_scope),
+          list(from_publication_date = sprintf("%d-01-01", start_year))
+        )
       )
 
       if (is.null(block_res) || nrow(block_res) == 0) {
@@ -800,7 +850,7 @@ fetch_openalex_data <- function(
         mutate(
           database = "OpenAlex",
           query_category = category,
-          search_query = query_str,
+          search_query = oa_query_label(query_str, openalex_scope),
           search_date = run_date,
           scopus_id = NA_character_,
           openalex_id = id,
@@ -1123,6 +1173,30 @@ chunk_search_topics <- function(search_topics, geo_terms = NULL, max_query_chars
   })
 }
 
+#' Flag a large gap between the Scopus and OpenAlex record counts
+#'
+#' Both databases run the same search, so one returning more than `ratio`
+#' times the other usually means the searches are not equivalent (e.g.
+#' OpenAlex searching full text). Returns a message, or `NULL` if the counts
+#' are comparable or either database returned nothing (reported separately).
+#' @noRd
+db_imbalance_note <- function(n_scopus, n_openalex, ratio = 100) {
+  if (n_scopus == 0 || n_openalex == 0) {
+    return(NULL)
+  }
+  big <- max(n_scopus, n_openalex)
+  small <- min(n_scopus, n_openalex)
+  if (big / small <= ratio) {
+    return(NULL)
+  }
+  sprintf(
+    "%s returned %.0fx as many records as %s; check the two searches are equivalent",
+    if (n_openalex > n_scopus) "OpenAlex" else "Scopus",
+    big / small,
+    if (n_openalex > n_scopus) "Scopus" else "OpenAlex"
+  )
+}
+
 #### 5. MASTER EXECUTION FUNCTION: run_scoping_review() ####
 
 #' Run the full scoping review pipeline
@@ -1153,6 +1227,11 @@ chunk_search_topics <- function(search_topics, geo_terms = NULL, max_query_chars
 #'   below the limit; `NULL` disables splitting. Not applied to the `"OR"` and
 #'   `"AND"` per-category modes. Each OpenAlex query is still capped at 10,000
 #'   records (50 pages), so a chunk returning exactly 10,000 was truncated.
+#' @param openalex_scope Which fields OpenAlex searches: `"title_abstract"`
+#'   (default, comparable to Scopus `TITLE-ABS-KEY`) or `"fulltext"` (the
+#'   behaviour before this change). See [fetch_openalex_data()]. If one database
+#'   returns more than 100 times as many records as the other, the end-of-run
+#'   summary warns about it.
 #' @param output_filename Path of the CSV file to write, relative to the
 #'   current working directory unless an absolute path is given. A `.csv`
 #'   extension is appended automatically if missing, and any missing parent
@@ -1183,8 +1262,10 @@ run_scoping_review <- function(
   max_openalex_pages = 5,
   scopus_view = "STANDARD",
   max_query_chars = 1400,
+  openalex_scope = c("title_abstract", "fulltext"),
   output_filename = "scoping_review_dataset.csv"
 ) {
+  openalex_scope <- match.arg(openalex_scope)
   # Ensure filename ends with .csv extension
   if (!str_detect(output_filename, "\\.csv$")) {
     output_filename <- paste0(output_filename, ".csv")
@@ -1241,7 +1322,8 @@ run_scoping_review <- function(
       chunks[[i]]$geo_terms,
       start_year,
       topic_operator = topic_operator,
-      max_pages = max_openalex_pages
+      max_pages = max_openalex_pages,
+      openalex_scope = openalex_scope
     )
   }))
   combined_raw <- bind_rows(scopus_raw, openalex_raw)
@@ -1258,10 +1340,15 @@ run_scoping_review <- function(
     db_status("Scopus", nrow(scopus_raw), .run_state$scopus_failed),
     db_status("OpenAlex", nrow(openalex_raw), .run_state$oa_failed)
   )
+  imbalance <- db_imbalance_note(nrow(scopus_raw), nrow(openalex_raw))
+  if (!is.null(imbalance)) {
+    summary_lines <- c(summary_lines, imbalance)
+  }
   any_empty_or_failed <- nrow(scopus_raw) == 0 ||
     nrow(openalex_raw) == 0 ||
     .run_state$scopus_failed > 0 ||
-    .run_state$oa_failed > 0
+    .run_state$oa_failed > 0 ||
+    !is.null(imbalance)
 
   cat(sprintf(
     "   -> Raw Records Retrieved: %d (Scopus: %d | OpenAlex: %d)\n",
@@ -1297,7 +1384,7 @@ run_scoping_review <- function(
   cat("\n=================================================================\n")
   if (any_empty_or_failed) {
     warning(
-      "A database contributed nothing or had failed requests: ",
+      "A database contributed nothing, had failed requests, or returned far more than the other: ",
       paste(summary_lines, collapse = " | "),
       call. = FALSE
     )

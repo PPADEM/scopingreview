@@ -129,6 +129,7 @@ ul.task-list li input[type="checkbox"] {
   <ul>
   <li><a href="#scopingreview-development" id="toc-scopingreview-development" class="nav-link active" data-scroll-target="#scopingreview-development">scopingreview (development)</a>
   <ul class="collapse">
+  <li><a href="#breaking-change-openalex-now-searches-title-and-abstract-only" id="toc-breaking-change-openalex-now-searches-title-and-abstract-only" class="nav-link" data-scroll-target="#breaking-change-openalex-now-searches-title-and-abstract-only">Breaking change: OpenAlex now searches title and abstract only</a></li>
   <li><a href="#new-features" id="toc-new-features" class="nav-link" data-scroll-target="#new-features">New features</a></li>
   <li><a href="#bug-fixes-api-resilience" id="toc-bug-fixes-api-resilience" class="nav-link" data-scroll-target="#bug-fixes-api-resilience">Bug Fixes &amp; API Resilience</a></li>
   </ul></li>
@@ -149,6 +150,15 @@ ul.task-list li input[type="checkbox"] {
 
 <section id="scopingreview-development" class="level1">
 <h1>scopingreview (development)</h1>
+<section id="breaking-change-openalex-now-searches-title-and-abstract-only" class="level2">
+<h2 class="anchored" data-anchor-id="breaking-change-openalex-now-searches-title-and-abstract-only">Breaking change: OpenAlex now searches title and abstract only</h2>
+<ul>
+<li><code>fetch_openalex_data()</code> and <code>run_scoping_review()</code> gain <code>openalex_scope</code>, defaulting to <code>"title_abstract"</code>. OpenAlex is now queried with the <code>title_and_abstract.search</code> filter, which matches the scope of Scopus’s <code>TITLE-ABS-KEY</code>. Previously OpenAlex used <code>search=</code>, which also matches full text and stems terms. That returned far more records than Scopus, mostly irrelevant ones (9 vs 16,895 in one run), and made heavy queries slow. <code>openalex_scope = "fulltext"</code> restores the old behaviour. <strong>This changes which records a review finds. Results from earlier versions are not comparable.</strong></li>
+<li>OpenAlex <code>search_query</code> values are prefixed with the parameter used (<code>title_and_abstract.search:</code> or <code>search:</code>), so the CSV shows how each record was found.</li>
+<li>Commas in search terms are replaced with spaces in title-and-abstract mode, because OpenAlex uses commas to separate filters.</li>
+<li>The end-of-run summary warns when one database returns more than 100 times as many records as the other.</li>
+</ul>
+</section>
 <section id="new-features" class="level2">
 <h2 class="anchored" data-anchor-id="new-features">New features</h2>
 <ul>
@@ -162,6 +172,9 @@ ul.task-list li input[type="checkbox"] {
 <li>OpenAlex pages are fetched one at a time (1.1 s apart, capped at 50 pages), stopping on a short or empty page.</li>
 <li>Only the failed page is retried (5 attempts, 2/5/10 s back-off); “Rate limit exceeded” is treated as retryable, and an empty result with a warning is treated as a failure.</li>
 <li>Errors are no longer silently swallowed; empty pages are no longer retried; <code>api_key</code> is passed only when <code>OPENALEX_KEY</code> is set, with a message otherwise.</li>
+<li>OpenAlex timeouts and other transient network errors (DNS, connection resets, SSL, empty replies) are now retried, with a 120 s request timeout (was 30 s) and a 5/10/20/30/60 s back-off. Previously a timeout silently cut a query short.</li>
+<li>A page that cannot be fetched is no longer mistaken for the end of results: paging stops with a warning that the query is incomplete, keeping the pages already retrieved.</li>
+<li>openalexR’s per-page progress messages are suppressed.</li>
 <li>Added testthat tests for query splitting and retry logic.</li>
 </ul>
 <hr>
