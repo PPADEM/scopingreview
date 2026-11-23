@@ -212,25 +212,33 @@ max_str <- function(vec) {
   vec[which.max(nchar(vec))]
 }
 
-#' Safe OpenAlex API query wrapper with retry backoff and duplicate-field fix
+#' Safe OpenAlex API query wrapper for a single page
 #'
-#' `openalexR::oa_fetch()` already retries HTTP 429/502/503/504 responses
-#' internally. However, upstream openalexR (<= 3.1.1) fails when OpenAlex
-#' includes `doi` inside `primary_location`, causing `Column name doi must not be duplicated`.
-#' To prevent this, we fetch with `output = "list"`, remove duplicate `doi` from
-#' `primary_location`, and convert via `openalexR::oa2df()`.
-#' Also catches "No records found!" warning on genuinely empty searches to avoid
-#' needless retry sleep cycles.
+#' Fetches one page with `output = "list"`, removes the duplicate `doi` from
+#' `primary_location` (upstream openalexR <= 3.1.1 otherwise fails with
+#' `Column name doi must not be duplicated`) and converts via
+#' `openalexR::oa2df()`. Only the failed page is retried, with increasing
+#' back-off (`backoff` seconds per attempt). A genuinely empty page (including
+#' the "No records found" warning) returns an empty tibble immediately; errors
+#' are reported with `page` in the message and returned as empty once retries
+#' are exhausted or the error is not retryable.
 #' @noRd
-oa_fetch_retry <- function(..., max_retries = 3, sleep_sec = 5.0) {
+oa_fetch_retry <- function(
+  ...,
+  page = NULL,
+  max_retries = 5,
+  backoff = c(2, 5, 10, 10, 10)
+) {
+  page_lbl <- if (is.null(page)) "?" else as.character(page)
   for (attempt in seq_len(max_retries)) {
     is_not_found <- FALSE
+    err_msg <- NULL
     res <- withCallingHandlers(
       tryCatch(
         {
           raw_list <- oa_fetch(..., output = "list")
           if (is.null(raw_list) || length(raw_list) == 0) {
-            NULL
+            tibble()
           } else {
             cleaned_list <- lapply(raw_list, function(paper) {
               if (is.list(paper$primary_location)) {
@@ -238,17 +246,21 @@ oa_fetch_retry <- function(..., max_retries = 3, sleep_sec = 5.0) {
               }
               paper
             })
-            oa2df(cleaned_list, entity = "works")
+            tryCatch(
+              oa2df(cleaned_list, entity = "works"),
+              error = function(e2) oa_fetch(...)
+            )
           }
         },
         error = function(e) {
-          # Fallback to standard oa_fetch in case output = "list" or oa2df is unavailable
-          tryCatch(oa_fetch(...), error = function(e2) NULL)
+          err_msg <<- conditionMessage(e)
+          NULL
         }
       ),
       warning = function(w) {
-        if (grepl("No records found", w$message, ignore.case = TRUE)) {
+        if (grepl("No records found", conditionMessage(w), ignore.case = TRUE)) {
           is_not_found <<- TRUE
+          invokeRestart("muffleWarning")
         }
       }
     )
@@ -256,23 +268,71 @@ oa_fetch_retry <- function(..., max_retries = 3, sleep_sec = 5.0) {
     if (is_not_found) {
       return(tibble())
     }
-
-    if (!is.null(res) && is.data.frame(res) && nrow(res) > 0) {
-      return(res)
+    if (is.null(err_msg)) {
+      return(if (is.data.frame(res)) res else tibble())
     }
 
+    retryable <- grepl(
+      "429|Too Many Requests|Rate limit exceeded|50[234]",
+      err_msg,
+      ignore.case = TRUE
+    )
+    message(sprintf(
+      "      [OpenAlex] Page %s failed (attempt %d/%d): %s",
+      page_lbl,
+      attempt,
+      max_retries,
+      err_msg
+    ))
+    if (!retryable) {
+      return(tibble())
+    }
     if (attempt < max_retries) {
-      wait_time <- sleep_sec * attempt
-      message(sprintf(
-        "      [OpenAlex] Empty/failed response on attempt %d/%d; pausing %.1f seconds before retry...",
-        attempt,
-        max_retries,
-        wait_time
-      ))
+      wait_time <- backoff[min(attempt, length(backoff))]
+      message(sprintf("      [OpenAlex] Retrying page %s in %.0f seconds...", page_lbl, wait_time))
       Sys.sleep(wait_time)
     }
   }
-  return(tibble())
+  tibble()
+}
+
+#' Fetch OpenAlex results one page at a time
+#'
+#' OpenAlex rate-limits complex queries to about 1 request per second, so pages
+#' are requested sequentially with a pause between them, stopping early on a
+#' short or empty page. Basic paging is capped at 10,000 results (page 50 at
+#' 200 per page), so `max_pages` is capped at 50.
+#' @noRd
+oa_fetch_pages <- function(max_pages, oa_key, ..., per_page = 200, pause_sec = 1.1) {
+  max_pages <- min(max_pages, 50)
+  extra <- if (nzchar(oa_key)) list(api_key = oa_key) else list()
+  out <- list()
+  for (i in seq_len(max_pages)) {
+    pg <- do.call(
+      oa_fetch_retry,
+      c(
+        list(
+          ...,
+          options = oa_options(pages = i, per_page = per_page),
+          verbose = FALSE,
+          page = i
+        ),
+        extra
+      )
+    )
+    if (nrow(pg) == 0) {
+      break
+    }
+    out[[length(out) + 1]] <- pg
+    if (nrow(pg) < per_page || i == max_pages) {
+      break
+    }
+    Sys.sleep(pause_sec)
+  }
+  if (length(out) == 0) {
+    return(tibble())
+  }
+  bind_rows(out)
 }
 
 #' Extract author names from OpenAlex authorships
@@ -524,7 +584,7 @@ fetch_scopus_data <- function(
 #' @inheritParams fetch_scopus_data
 #' @param max_pages Maximum number of pages to retrieve per query, at 200
 #'   records per page (e.g. `max_pages = 5` retrieves at most 1,000 records),
-#'   applied separately to each topic category query (or once, for the single
+#'   capped at 50 (OpenAlex basic paging stops at 10,000 results), applied separately to each topic category query (or once, for the single
 #'   combined query, in `"multi"` mode).
 #' @return A tibble with one row per record and columns `database`,
 #'   `query_category`, `search_query`, `search_date`, `scopus_id` (always
@@ -552,6 +612,11 @@ fetch_openalex_data <- function(
   oa_key <- Sys.getenv("OPENALEX_KEY")
   if (oa_key != "") {
     options(openalexR.apikey = oa_key)
+  } else {
+    message(
+      "[OpenAlex] OPENALEX_KEY is not set: requests share OpenAlex's free daily ",
+      "budget with everyone on your IP address and may be rate-limited."
+    )
   }
 
   run_date <- as.character(Sys.Date())
@@ -586,13 +651,12 @@ fetch_openalex_data <- function(
     ))
     Sys.sleep(0.3)
 
-    block_res <- oa_fetch_retry(
+    block_res <- oa_fetch_pages(
+      max_pages,
+      oa_key,
       entity = "works",
       search = query_str,
-      from_publication_date = sprintf("%d-01-01", start_year),
-      options = oa_options(pages = 1:max_pages, per_page = 200),
-      api_key = oa_key,
-      verbose = FALSE
+      from_publication_date = sprintf("%d-01-01", start_year)
     )
 
     if (is.null(block_res) || nrow(block_res) == 0) {
@@ -656,13 +720,12 @@ fetch_openalex_data <- function(
 
       Sys.sleep(0.3)
 
-      block_res <- oa_fetch_retry(
+      block_res <- oa_fetch_pages(
+        max_pages,
+        oa_key,
         entity = "works",
         search = query_str,
-        from_publication_date = sprintf("%d-01-01", start_year),
-        options = oa_options(pages = 1:max_pages, per_page = 200),
-        api_key = oa_key,
-        verbose = FALSE
+        from_publication_date = sprintf("%d-01-01", start_year)
       )
 
       if (is.null(block_res) || nrow(block_res) == 0) {
