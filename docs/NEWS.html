@@ -127,9 +127,14 @@ ul.task-list li input[type="checkbox"] {
     <h2 id="toc-title">On this page</h2>
    
   <ul>
-  <li><a href="#scopingreview-0.2.0" id="toc-scopingreview-0.2.0" class="nav-link active" data-scroll-target="#scopingreview-0.2.0">scopingreview 0.2.0</a>
+  <li><a href="#scopingreview-development" id="toc-scopingreview-development" class="nav-link active" data-scroll-target="#scopingreview-development">scopingreview (development)</a>
   <ul class="collapse">
+  <li><a href="#new-features" id="toc-new-features" class="nav-link" data-scroll-target="#new-features">New features</a></li>
   <li><a href="#bug-fixes-api-resilience" id="toc-bug-fixes-api-resilience" class="nav-link" data-scroll-target="#bug-fixes-api-resilience">Bug Fixes &amp; API Resilience</a></li>
+  </ul></li>
+  <li><a href="#scopingreview-0.2.0" id="toc-scopingreview-0.2.0" class="nav-link" data-scroll-target="#scopingreview-0.2.0">scopingreview 0.2.0</a>
+  <ul class="collapse">
+  <li><a href="#bug-fixes-api-resilience-1" id="toc-bug-fixes-api-resilience-1" class="nav-link" data-scroll-target="#bug-fixes-api-resilience-1">Bug Fixes &amp; API Resilience</a></li>
   <li><a href="#packaging-build-improvements" id="toc-packaging-build-improvements" class="nav-link" data-scroll-target="#packaging-build-improvements">Packaging &amp; Build Improvements</a></li>
   </ul></li>
   <li><a href="#scopingreview-0.1.0" id="toc-scopingreview-0.1.0" class="nav-link" data-scroll-target="#scopingreview-0.1.0">scopingreview 0.1.0</a></li>
@@ -142,10 +147,30 @@ ul.task-list li input[type="checkbox"] {
 
 
 
-<section id="scopingreview-0.2.0" class="level1">
-<h1>scopingreview 0.2.0</h1>
+<section id="scopingreview-development" class="level1">
+<h1>scopingreview (development)</h1>
+<section id="new-features" class="level2">
+<h2 class="anchored" data-anchor-id="new-features">New features</h2>
+<ul>
+<li><code>run_scoping_review()</code> gains <code>max_query_chars</code> (default 1400). In <code>"multi"</code> mode, term lists (and geographic terms) are split until every query fits OpenAlex’s 1,500-character limit; all combinations are run, merged and deduplicated once. New exported <code>chunk_search_topics()</code> previews the split.</li>
+<li>The final banner now reports records and failed requests per database, and warns instead of reporting success when a database contributes nothing.</li>
+</ul>
+</section>
 <section id="bug-fixes-api-resilience" class="level2">
 <h2 class="anchored" data-anchor-id="bug-fixes-api-resilience">Bug Fixes &amp; API Resilience</h2>
+<ul>
+<li>OpenAlex pages are fetched one at a time (1.1 s apart, capped at 50 pages), stopping on a short or empty page.</li>
+<li>Only the failed page is retried (5 attempts, 2/5/10 s back-off); “Rate limit exceeded” is treated as retryable, and an empty result with a warning is treated as a failure.</li>
+<li>Errors are no longer silently swallowed; empty pages are no longer retried; <code>api_key</code> is passed only when <code>OPENALEX_KEY</code> is set, with a message otherwise.</li>
+<li>Added testthat tests for query splitting and retry logic.</li>
+</ul>
+<hr>
+</section>
+</section>
+<section id="scopingreview-0.2.0" class="level1">
+<h1>scopingreview 0.2.0</h1>
+<section id="bug-fixes-api-resilience-1" class="level2">
+<h2 class="anchored" data-anchor-id="bug-fixes-api-resilience-1">Bug Fixes &amp; API Resilience</h2>
 <ul>
 <li><strong>OpenAlex compatibility</strong>: Fixed a critical failure where upstream schema changes in OpenAlex (adding <code>doi</code> inside <code>primary_location</code>) caused <code>openalexR</code> (&lt;= 3.1.1) to crash with <code>Column name 'doi' must not be duplicated</code>. Queries now fetch via <code>output = "list"</code>, sanitize nested duplicate fields, and convert safely via <code>oa2df()</code>.</li>
 <li><strong>Scopus view authorization</strong>: Added <code>scopus_view</code> parameter (defaulting to <code>"STANDARD"</code>) to <code>fetch_scopus_data()</code> and <code>run_scoping_review()</code>. If <code>"COMPLETE"</code> view is requested with an API key lacking institutional entitlement, the pipeline now logs an informative message and falls back gracefully to <code>"STANDARD"</code> instead of failing with HTTP 401 Unauthorized.</li>

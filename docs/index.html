@@ -174,7 +174,10 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <li><a href="#installation" id="toc-installation" class="nav-link" data-scroll-target="#installation">1. Installation</a></li>
   <li><a href="#api-key-setup" id="toc-api-key-setup" class="nav-link" data-scroll-target="#api-key-setup">2. API Key Setup</a></li>
   </ul></li>
-  <li><a href="#customizing-output-file-locations-search-modes" id="toc-customizing-output-file-locations-search-modes" class="nav-link" data-scroll-target="#customizing-output-file-locations-search-modes">🛠️ Customizing Output File Locations &amp; Search Modes</a></li>
+  <li><a href="#customizing-output-file-locations-search-modes" id="toc-customizing-output-file-locations-search-modes" class="nav-link" data-scroll-target="#customizing-output-file-locations-search-modes">🛠️ Customizing Output File Locations &amp; Search Modes</a>
+  <ul class="collapse">
+  <li><a href="#long-searches-and-rate-limits" id="toc-long-searches-and-rate-limits" class="nav-link" data-scroll-target="#long-searches-and-rate-limits">Long searches and rate limits</a></li>
+  </ul></li>
   <li><a href="#example-script" id="toc-example-script" class="nav-link" data-scroll-target="#example-script">🚀 Example Script</a></li>
   <li><a href="#output-file-schema" id="toc-output-file-schema" class="nav-link" data-scroll-target="#output-file-schema">📊 Output File Schema</a></li>
   </ul>
@@ -284,6 +287,10 @@ ELSEVIER_SCOPUS_KEY="your_scopus_api_key"</code></pre>
 <span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>  <span class="at">topic_operator  =</span> <span class="st">"multi"</span>,</span>
 <span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>  <span class="at">output_filename =</span> <span class="st">"outputs/multi_block_search.csv"</span></span>
 <span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<section id="long-searches-and-rate-limits" class="level3">
+<h3 class="anchored" data-anchor-id="long-searches-and-rate-limits">Long searches and rate limits</h3>
+<p>OpenAlex rejects queries over 1,500 characters. In <code>"multi"</code> mode, <code>run_scoping_review()</code> automatically splits long term lists (<code>max_query_chars = 1400</code> by default; <code>NULL</code> disables it), runs every combination, and merges and deduplicates the results. Large searches therefore become many API calls: preview them with <code>chunk_search_topics()</code>. OpenAlex pages are fetched one at a time (about 1 second each, capped at 50 pages / 10,000 records per query), so set <code>OPENALEX_KEY</code> to avoid shared rate limits.</p>
+</section>
 </section>
 <section id="example-script" class="level2">
 <h2 class="anchored" data-anchor-id="example-script">🚀 Example Script</h2>

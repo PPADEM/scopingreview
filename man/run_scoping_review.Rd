@@ -12,6 +12,7 @@ run_scoping_review(
   max_scopus_records = 5000,
   max_openalex_pages = 5,
   scopus_view = "STANDARD",
+  max_query_chars = 1400,
   output_filename = "scoping_review_dataset.csv"
 )
 }
@@ -56,6 +57,17 @@ page. See \code{\link[=fetch_openalex_data]{fetch_openalex_data()}}.}
 
 \item{scopus_view}{Which Scopus search view to request (\code{"STANDARD"} or
 \code{"COMPLETE"}). Defaults to \code{"STANDARD"}. See \code{\link[=fetch_scopus_data]{fetch_scopus_data()}}.}
+
+\item{max_query_chars}{Maximum characters per search query. OpenAlex rejects
+searches over 1,500 characters (HTTP 400) and Scopus rejects very long
+ones too. In \code{"multi"} mode, term lists (and geographic terms) are split
+in half until every query fits, every combination of the pieces is run,
+and the results are merged and deduplicated once. Large searches therefore
+turn into many API calls (see \code{\link[=chunk_search_topics]{chunk_search_topics()}} to preview); a
+warning is shown above 20 queries. Defaults to 1400, leaving a margin
+below the limit; \code{NULL} disables splitting. Not applied to the \code{"OR"} and
+\code{"AND"} per-category modes. Each OpenAlex query is still capped at 10,000
+records (50 pages), so a chunk returning exactly 10,000 was truncated.}
 
 \item{output_filename}{Path of the CSV file to write, relative to the
 current working directory unless an absolute path is given. A \code{.csv}

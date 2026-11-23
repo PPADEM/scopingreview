@@ -102,6 +102,10 @@ multi_data <- run_scoping_review(
 )
 ```
 
+### Long searches and rate limits
+
+OpenAlex rejects queries over 1,500 characters. In `"multi"` mode, `run_scoping_review()` automatically splits long term lists (`max_query_chars = 1400` by default; `NULL` disables it), runs every combination, and merges and deduplicates the results. Large searches therefore become many API calls: preview them with `chunk_search_topics()`. OpenAlex pages are fetched one at a time (about 1 second each, capped at 50 pages / 10,000 records per query), so set `OPENALEX_KEY` to avoid shared rate limits.
+
 ## 🚀 Example Script
 
 A complete example script with three different search runs is included with the package. Copy it to your working directory to use as a starting point:

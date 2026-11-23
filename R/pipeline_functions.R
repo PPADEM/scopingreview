@@ -212,6 +212,12 @@ max_str <- function(vec) {
   vec[which.max(nchar(vec))]
 }
 
+#' Per-run request-failure counters, read by run_scoping_review()
+#' @noRd
+.run_state <- new.env(parent = emptyenv())
+.run_state$oa_failed <- 0L
+.run_state$scopus_failed <- 0L
+
 #' Safe OpenAlex API query wrapper for a single page
 #'
 #' Fetches one page with `output = "list"`, removes the duplicate `doi` from
@@ -232,6 +238,7 @@ oa_fetch_retry <- function(
   page_lbl <- if (is.null(page)) "?" else as.character(page)
   for (attempt in seq_len(max_retries)) {
     is_not_found <- FALSE
+    warn_msg <- NULL
     err_msg <- NULL
     res <- withCallingHandlers(
       tryCatch(
@@ -261,9 +268,22 @@ oa_fetch_retry <- function(
         if (grepl("No records found", conditionMessage(w), ignore.case = TRUE)) {
           is_not_found <<- TRUE
           invokeRestart("muffleWarning")
+        } else {
+          warn_msg <<- conditionMessage(w)
         }
       }
     )
+
+    # oa_fetch() can return NULL plus a warning when a request fails; an empty
+    # result accompanied by any other warning is a failure, not an empty page.
+    if (
+      !is_not_found &&
+        is.null(err_msg) &&
+        !is.null(warn_msg) &&
+        (is.null(res) || (is.data.frame(res) && nrow(res) == 0))
+    ) {
+      err_msg <- warn_msg
+    }
 
     if (is_not_found) {
       return(tibble())
@@ -285,6 +305,7 @@ oa_fetch_retry <- function(
       err_msg
     ))
     if (!retryable) {
+      .run_state$oa_failed <- .run_state$oa_failed + 1L
       return(tibble())
     }
     if (attempt < max_retries) {
@@ -293,6 +314,7 @@ oa_fetch_retry <- function(
       Sys.sleep(wait_time)
     }
   }
+  .run_state$oa_failed <- .run_state$oa_failed + 1L
   tibble()
 }
 
@@ -468,9 +490,15 @@ fetch_scopus_data <- function(
               view = "STANDARD",
               verbose = FALSE
             ),
-            error = function(e2) NULL
+            error = function(e2) {
+              message("   -> [Scopus] Request failed: ", conditionMessage(e2))
+              .run_state$scopus_failed <- .run_state$scopus_failed + 1L
+              NULL
+            }
           ))
         }
+        message("   -> [Scopus] Request failed: ", conditionMessage(e))
+        .run_state$scopus_failed <- .run_state$scopus_failed + 1L
         NULL
       }
     )
@@ -958,6 +986,110 @@ deduplicate_records <- function(df, target_journals = TARGET_JOURNALS) {
   return(clean_df)
 }
 
+#### 4b. QUERY SPLITTING ####
+
+#' Estimate the length of a Boolean block of quoted terms
+#' @noRd
+block_chars <- function(terms) {
+  sum(nchar(terms) + 2) + 4 * (length(terms) - 1) + 2
+}
+
+#' Split term blocks so every combined query fits a character limit
+#'
+#' Repeatedly halves the longest piece of any block until the estimated
+#' combined query (the longest piece of each block, joined by `" AND "`) is at
+#' most `max_chars`. Every combination of pieces is one query.
+#' @return A list of blocks, each a list of term vectors (pieces).
+#' @noRd
+split_blocks_by_length <- function(blocks, max_chars, wrapper_chars = 10) {
+  pieces <- lapply(blocks, function(b) list(b))
+  too_long <- unlist(lapply(blocks, function(b) b[nchar(b) + 2 + 2 > max_chars]))
+  if (length(too_long) > 0) {
+    stop(
+      sprintf(
+        "A single search term is longer than max_query_chars (%d): \"%s...\"",
+        max_chars,
+        substr(too_long[1], 1, 40)
+      ),
+      call. = FALSE
+    )
+  }
+  est <- function(p) {
+    sum(vapply(p, function(x) max(vapply(x, block_chars, numeric(1))), numeric(1))) +
+      5 * (length(p) - 1) + wrapper_chars
+  }
+  while (est(pieces) > max_chars) {
+    lens <- lapply(pieces, function(x) vapply(x, block_chars, numeric(1)))
+    b <- which.max(vapply(lens, max, numeric(1)))
+    i <- which.max(lens[[b]])
+    piece <- pieces[[b]][[i]]
+    if (length(piece) < 2) {
+      stop(
+        sprintf(
+          "Cannot split the search below max_query_chars (%d); a single term is too long.",
+          max_chars
+        ),
+        call. = FALSE
+      )
+    }
+    half <- ceiling(length(piece) / 2)
+    pieces[[b]] <- append(
+      pieces[[b]][-i],
+      list(piece[seq_len(half)], piece[-seq_len(half)]),
+      after = i - 1
+    )
+  }
+  pieces
+}
+
+#' Preview how a multi-block search is split into queries
+#'
+#' Splits the term lists of a `"multi"` search (plus optional geographic
+#' terms, treated as an extra block) so that every combined query stays under
+#' `max_query_chars`. [run_scoping_review()] runs one query per combination of
+#' pieces, so this lets you see the number of API calls beforehand.
+#'
+#' @param search_topics Named list of character vectors, one per block.
+#' @param geo_terms Optional character vector of geographic terms.
+#' @param max_query_chars Maximum characters per query. `NULL` disables
+#'   splitting (one query).
+#' @return A list with one element per query, each a list with `search_topics`
+#'   (named list of term vectors) and `geo_terms` (character vector or `NULL`).
+#' @export
+#' @examples
+#' chunks <- chunk_search_topics(
+#'   list(a = paste("term", 1:200), b = c("x", "y")),
+#'   geo_terms = c("Africa", "Kenya"),
+#'   max_query_chars = 1400
+#' )
+#' length(chunks)
+chunk_search_topics <- function(search_topics, geo_terms = NULL, max_query_chars = 1400) {
+  geo_terms <- geo_terms[nchar(trimws(geo_terms)) > 0]
+  if (length(geo_terms) == 0) {
+    geo_terms <- NULL
+  }
+  if (is.null(max_query_chars)) {
+    return(list(list(search_topics = search_topics, geo_terms = geo_terms)))
+  }
+  blocks <- lapply(search_topics, function(b) str_replace_all(b, '"', ''))
+  if (!is.null(geo_terms)) {
+    blocks[[".geo"]] <- str_replace_all(geo_terms, '"', '')
+  }
+  pieces <- split_blocks_by_length(blocks, max_query_chars)
+  combos <- do.call(
+    expand.grid,
+    c(lapply(pieces, seq_along), list(KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE))
+  )
+  lapply(seq_len(nrow(combos)), function(r) {
+    picked <- Map(function(p, k) p[[k]], pieces, as.list(combos[r, , drop = TRUE]))
+    geo <- picked[[".geo"]]
+    list(
+      search_topics = picked[setdiff(names(picked), ".geo")],
+      geo_terms = geo
+    )
+  })
+}
+
 #### 5. MASTER EXECUTION FUNCTION: run_scoping_review() ####
 
 #' Run the full scoping review pipeline
@@ -978,6 +1110,16 @@ deduplicate_records <- function(df, target_journals = TARGET_JOURNALS) {
 #'   page. See [fetch_openalex_data()].
 #' @param scopus_view Which Scopus search view to request (`"STANDARD"` or
 #'   `"COMPLETE"`). Defaults to `"STANDARD"`. See [fetch_scopus_data()].
+#' @param max_query_chars Maximum characters per search query. OpenAlex rejects
+#'   searches over 1,500 characters (HTTP 400) and Scopus rejects very long
+#'   ones too. In `"multi"` mode, term lists (and geographic terms) are split
+#'   in half until every query fits, every combination of the pieces is run,
+#'   and the results are merged and deduplicated once. Large searches therefore
+#'   turn into many API calls (see [chunk_search_topics()] to preview); a
+#'   warning is shown above 20 queries. Defaults to 1400, leaving a margin
+#'   below the limit; `NULL` disables splitting. Not applied to the `"OR"` and
+#'   `"AND"` per-category modes. Each OpenAlex query is still capped at 10,000
+#'   records (50 pages), so a chunk returning exactly 10,000 was truncated.
 #' @param output_filename Path of the CSV file to write, relative to the
 #'   current working directory unless an absolute path is given. A `.csv`
 #'   extension is appended automatically if missing, and any missing parent
@@ -1007,6 +1149,7 @@ run_scoping_review <- function(
   max_scopus_records = 5000,
   max_openalex_pages = 5,
   scopus_view = "STANDARD",
+  max_query_chars = 1400,
   output_filename = "scoping_review_dataset.csv"
 ) {
   # Ensure filename ends with .csv extension
@@ -1026,22 +1169,66 @@ run_scoping_review <- function(
     output_filename
   ))
   cat("=================================================================\n")
-  scopus_raw <- fetch_scopus_data(
-    search_topics,
-    geo_terms,
-    start_year,
-    topic_operator = topic_operator,
-    max_records = max_scopus_records,
-    view = scopus_view
-  )
-  openalex_raw <- fetch_openalex_data(
-    search_topics,
-    geo_terms,
-    start_year,
-    topic_operator = topic_operator,
-    max_pages = max_openalex_pages
-  )
+  .run_state$oa_failed <- 0L
+  .run_state$scopus_failed <- 0L
+
+  if (toupper(trimws(topic_operator)) == "MULTI") {
+    chunks <- chunk_search_topics(search_topics, geo_terms, max_query_chars)
+  } else {
+    chunks <- list(list(search_topics = search_topics, geo_terms = geo_terms))
+  }
+  if (length(chunks) > 1) {
+    cat(sprintf("   -> Splitting into %d queries (max_query_chars = %d)\n", length(chunks), max_query_chars))
+    if (length(chunks) > 20) {
+      warning(
+        sprintf(
+          "Search split into %d queries; each one uses API quota and takes time.",
+          length(chunks)
+        ),
+        call. = FALSE
+      )
+    }
+  }
+
+  scopus_raw <- bind_rows(lapply(seq_along(chunks), function(i) {
+    if (length(chunks) > 1) cat(sprintf("   -> [Scopus] Query %d/%d\n", i, length(chunks)))
+    fetch_scopus_data(
+      chunks[[i]]$search_topics,
+      chunks[[i]]$geo_terms,
+      start_year,
+      topic_operator = topic_operator,
+      max_records = max_scopus_records,
+      view = scopus_view
+    )
+  }))
+  openalex_raw <- bind_rows(lapply(seq_along(chunks), function(i) {
+    if (length(chunks) > 1) cat(sprintf("   -> [OpenAlex] Query %d/%d\n", i, length(chunks)))
+    fetch_openalex_data(
+      chunks[[i]]$search_topics,
+      chunks[[i]]$geo_terms,
+      start_year,
+      topic_operator = topic_operator,
+      max_pages = max_openalex_pages
+    )
+  }))
   combined_raw <- bind_rows(scopus_raw, openalex_raw)
+
+  db_status <- function(name, n, failed) {
+    sprintf(
+      "%s: %d records%s",
+      name,
+      n,
+      if (failed > 0) sprintf(" (%d request(s) failed)", failed) else ""
+    )
+  }
+  summary_lines <- c(
+    db_status("Scopus", nrow(scopus_raw), .run_state$scopus_failed),
+    db_status("OpenAlex", nrow(openalex_raw), .run_state$oa_failed)
+  )
+  any_empty_or_failed <- nrow(scopus_raw) == 0 ||
+    nrow(openalex_raw) == 0 ||
+    .run_state$scopus_failed > 0 ||
+    .run_state$oa_failed > 0
 
   cat(sprintf(
     "   -> Raw Records Retrieved: %d (Scopus: %d | OpenAlex: %d)\n",
@@ -1075,10 +1262,24 @@ run_scoping_review <- function(
   write.csv(clean_data, output_filename, row.names = FALSE)
 
   cat("\n=================================================================\n")
-  cat(sprintf(
-    "SUCCESS! Pipeline Complete. Dataset saved to:\n  %s\n",
-    output_filename
-  ))
+  if (any_empty_or_failed) {
+    warning(
+      "A database contributed nothing or had failed requests: ",
+      paste(summary_lines, collapse = " | "),
+      call. = FALSE
+    )
+    cat(sprintf(
+      "WARNING: Pipeline finished with issues (%s). Dataset saved to:\n  %s\n",
+      paste(summary_lines, collapse = " | "),
+      output_filename
+    ))
+  } else {
+    cat(sprintf(
+      "SUCCESS! Pipeline Complete (%s). Dataset saved to:\n  %s\n",
+      paste(summary_lines, collapse = " | "),
+      output_filename
+    ))
+  }
   cat("=================================================================\n\n")
 
   return(clean_data)

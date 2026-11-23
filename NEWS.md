@@ -1,3 +1,17 @@
+# scopingreview (development)
+
+## New features
+* `run_scoping_review()` gains `max_query_chars` (default 1400). In `"multi"` mode, term lists (and geographic terms) are split until every query fits OpenAlex's 1,500-character limit; all combinations are run, merged and deduplicated once. New exported `chunk_search_topics()` previews the split.
+* The final banner now reports records and failed requests per database, and warns instead of reporting success when a database contributes nothing.
+
+## Bug Fixes & API Resilience
+* OpenAlex pages are fetched one at a time (1.1 s apart, capped at 50 pages), stopping on a short or empty page.
+* Only the failed page is retried (5 attempts, 2/5/10 s back-off); "Rate limit exceeded" is treated as retryable, and an empty result with a warning is treated as a failure.
+* Errors are no longer silently swallowed; empty pages are no longer retried; `api_key` is passed only when `OPENALEX_KEY` is set, with a message otherwise.
+* Added testthat tests for query splitting and retry logic.
+
+---
+
 # scopingreview 0.2.0
 
 ## Bug Fixes & API Resilience

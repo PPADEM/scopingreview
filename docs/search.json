@@ -32,7 +32,7 @@
     "href": "index.html#customizing-output-file-locations-search-modes",
     "title": "\nscopingreview\n",
     "section": "🛠️ Customizing Output File Locations & Search Modes",
-    "text": "🛠️ Customizing Output File Locations & Search Modes\nBy default, files are saved in your current working directory. If a subfolder path is included in output_filename, the directory is created automatically:\nlibrary(scopingreview)\n\n# Run 1: General Broad Search (OR mode)\ngeneral_data &lt;- run_scoping_review(\n  search_topics   = list(party = c(\"political party\", \"party decline\")),\n  geo_terms       = c(\"Africa\", \"Sub-Saharan Africa\"),\n  start_year      = 2020,\n  topic_operator  = \"OR\",\n  output_filename = \"general_search.csv\"\n)\n\n# Run 2: Multi-Block Search (BLOCK 1 AND BLOCK 2 AND GEO)\nmulti_data &lt;- run_scoping_review(\n  search_topics   = list(\n    parties = c(\"political party\", \"party organization\"),\n    communication = c(\"communication\", \"meeting\", \"social media\")\n  ),\n  geo_terms       = c(\"Africa\", \"Sub-Saharan Africa\"),\n  start_year      = 2020,\n  topic_operator  = \"multi\",\n  output_filename = \"outputs/multi_block_search.csv\"\n)"
+    "text": "🛠️ Customizing Output File Locations & Search Modes\nBy default, files are saved in your current working directory. If a subfolder path is included in output_filename, the directory is created automatically:\nlibrary(scopingreview)\n\n# Run 1: General Broad Search (OR mode)\ngeneral_data &lt;- run_scoping_review(\n  search_topics   = list(party = c(\"political party\", \"party decline\")),\n  geo_terms       = c(\"Africa\", \"Sub-Saharan Africa\"),\n  start_year      = 2020,\n  topic_operator  = \"OR\",\n  output_filename = \"general_search.csv\"\n)\n\n# Run 2: Multi-Block Search (BLOCK 1 AND BLOCK 2 AND GEO)\nmulti_data &lt;- run_scoping_review(\n  search_topics   = list(\n    parties = c(\"political party\", \"party organization\"),\n    communication = c(\"communication\", \"meeting\", \"social media\")\n  ),\n  geo_terms       = c(\"Africa\", \"Sub-Saharan Africa\"),\n  start_year      = 2020,\n  topic_operator  = \"multi\",\n  output_filename = \"outputs/multi_block_search.csv\"\n)\n\nLong searches and rate limits\nOpenAlex rejects queries over 1,500 characters. In \"multi\" mode, run_scoping_review() automatically splits long term lists (max_query_chars = 1400 by default; NULL disables it), runs every combination, and merges and deduplicates the results. Large searches therefore become many API calls: preview them with chunk_search_topics(). OpenAlex pages are fetched one at a time (about 1 second each, capped at 50 pages / 10,000 records per query), so set OPENALEX_KEY to avoid shared rate limits."
   },
   {
     "objectID": "index.html#example-script",
@@ -58,22 +58,36 @@
   {
     "objectID": "NEWS.html",
     "href": "NEWS.html",
-    "title": "scopingreview 0.2.0",
+    "title": "scopingreview (development)",
     "section": "",
-    "text": "OpenAlex compatibility: Fixed a critical failure where upstream schema changes in OpenAlex (adding doi inside primary_location) caused openalexR (&lt;= 3.1.1) to crash with Column name 'doi' must not be duplicated. Queries now fetch via output = \"list\", sanitize nested duplicate fields, and convert safely via oa2df().\nScopus view authorization: Added scopus_view parameter (defaulting to \"STANDARD\") to fetch_scopus_data() and run_scoping_review(). If \"COMPLETE\" view is requested with an API key lacking institutional entitlement, the pipeline now logs an informative message and falls back gracefully to \"STANDARD\" instead of failing with HTTP 401 Unauthorized.\nOpenAlex empty search handling: Genuinely empty search results (signaled by \"No records found!\") no longer trigger multiple redundant backoff retry sleep cycles.\n\n\n\n\n\nPortability & R CMD check: Added ^docs$ and ^_extensions$ to .Rbuildignore so Quarto website assets and presentation extensions do not cause file path length or non-portable name warnings during package builds.\nTransitive deduplication: Refined Stage 2 fuzzy title deduplication to use union-find with path compression for consistent transitive grouping."
+    "text": "run_scoping_review() gains max_query_chars (default 1400). In \"multi\" mode, term lists (and geographic terms) are split until every query fits OpenAlex’s 1,500-character limit; all combinations are run, merged and deduplicated once. New exported chunk_search_topics() previews the split.\nThe final banner now reports records and failed requests per database, and warns instead of reporting success when a database contributes nothing.\n\n\n\n\n\nOpenAlex pages are fetched one at a time (1.1 s apart, capped at 50 pages), stopping on a short or empty page.\nOnly the failed page is retried (5 attempts, 2/5/10 s back-off); “Rate limit exceeded” is treated as retryable, and an empty result with a warning is treated as a failure.\nErrors are no longer silently swallowed; empty pages are no longer retried; api_key is passed only when OPENALEX_KEY is set, with a message otherwise.\nAdded testthat tests for query splitting and retry logic."
+  },
+  {
+    "objectID": "NEWS.html#new-features",
+    "href": "NEWS.html#new-features",
+    "title": "scopingreview (development)",
+    "section": "",
+    "text": "run_scoping_review() gains max_query_chars (default 1400). In \"multi\" mode, term lists (and geographic terms) are split until every query fits OpenAlex’s 1,500-character limit; all combinations are run, merged and deduplicated once. New exported chunk_search_topics() previews the split.\nThe final banner now reports records and failed requests per database, and warns instead of reporting success when a database contributes nothing."
   },
   {
     "objectID": "NEWS.html#bug-fixes-api-resilience",
     "href": "NEWS.html#bug-fixes-api-resilience",
-    "title": "scopingreview 0.2.0",
+    "title": "scopingreview (development)",
     "section": "",
-    "text": "OpenAlex compatibility: Fixed a critical failure where upstream schema changes in OpenAlex (adding doi inside primary_location) caused openalexR (&lt;= 3.1.1) to crash with Column name 'doi' must not be duplicated. Queries now fetch via output = \"list\", sanitize nested duplicate fields, and convert safely via oa2df().\nScopus view authorization: Added scopus_view parameter (defaulting to \"STANDARD\") to fetch_scopus_data() and run_scoping_review(). If \"COMPLETE\" view is requested with an API key lacking institutional entitlement, the pipeline now logs an informative message and falls back gracefully to \"STANDARD\" instead of failing with HTTP 401 Unauthorized.\nOpenAlex empty search handling: Genuinely empty search results (signaled by \"No records found!\") no longer trigger multiple redundant backoff retry sleep cycles."
+    "text": "OpenAlex pages are fetched one at a time (1.1 s apart, capped at 50 pages), stopping on a short or empty page.\nOnly the failed page is retried (5 attempts, 2/5/10 s back-off); “Rate limit exceeded” is treated as retryable, and an empty result with a warning is treated as a failure.\nErrors are no longer silently swallowed; empty pages are no longer retried; api_key is passed only when OPENALEX_KEY is set, with a message otherwise.\nAdded testthat tests for query splitting and retry logic."
+  },
+  {
+    "objectID": "NEWS.html#bug-fixes-api-resilience-1",
+    "href": "NEWS.html#bug-fixes-api-resilience-1",
+    "title": "scopingreview (development)",
+    "section": "Bug Fixes & API Resilience",
+    "text": "Bug Fixes & API Resilience\n\nOpenAlex compatibility: Fixed a critical failure where upstream schema changes in OpenAlex (adding doi inside primary_location) caused openalexR (&lt;= 3.1.1) to crash with Column name 'doi' must not be duplicated. Queries now fetch via output = \"list\", sanitize nested duplicate fields, and convert safely via oa2df().\nScopus view authorization: Added scopus_view parameter (defaulting to \"STANDARD\") to fetch_scopus_data() and run_scoping_review(). If \"COMPLETE\" view is requested with an API key lacking institutional entitlement, the pipeline now logs an informative message and falls back gracefully to \"STANDARD\" instead of failing with HTTP 401 Unauthorized.\nOpenAlex empty search handling: Genuinely empty search results (signaled by \"No records found!\") no longer trigger multiple redundant backoff retry sleep cycles."
   },
   {
     "objectID": "NEWS.html#packaging-build-improvements",
     "href": "NEWS.html#packaging-build-improvements",
-    "title": "scopingreview 0.2.0",
-    "section": "",
-    "text": "Portability & R CMD check: Added ^docs$ and ^_extensions$ to .Rbuildignore so Quarto website assets and presentation extensions do not cause file path length or non-portable name warnings during package builds.\nTransitive deduplication: Refined Stage 2 fuzzy title deduplication to use union-find with path compression for consistent transitive grouping."
+    "title": "scopingreview (development)",
+    "section": "Packaging & Build Improvements",
+    "text": "Packaging & Build Improvements\n\nPortability & R CMD check: Added ^docs$ and ^_extensions$ to .Rbuildignore so Quarto website assets and presentation extensions do not cause file path length or non-portable name warnings during package builds.\nTransitive deduplication: Refined Stage 2 fuzzy title deduplication to use union-find with path compression for consistent transitive grouping."
   }
 ]

@@ -45,7 +45,7 @@ value silently falls back to \code{"OR"}.}
 
 \item{max_pages}{Maximum number of pages to retrieve per query, at 200
 records per page (e.g. \code{max_pages = 5} retrieves at most 1,000 records),
-applied separately to each topic category query (or once, for the single
+capped at 50 (OpenAlex basic paging stops at 10,000 results), applied separately to each topic category query (or once, for the single
 combined query, in \code{"multi"} mode).}
 }
 \value{
