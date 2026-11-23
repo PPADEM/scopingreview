@@ -61,8 +61,11 @@ returns the matching works. Unlike \code{\link[=fetch_scopus_data]{fetch_scopus_
 always queried: the \code{OPENALEX_KEY} environment variable is optional and,
 if set, is used to access OpenAlex's "polite pool" for higher rate limits;
 without it, queries still run but may be throttled more aggressively.
-HTTP 429 (rate-limit) responses are retried automatically, with an
-increasing back-off, via an internal \code{oa_fetch_retry()} wrapper.
+Rate-limit (HTTP 429), gateway (502-504) and transient network errors
+(e.g. timeouts) are retried automatically, with an increasing back-off,
+via an internal \code{oa_fetch_retry()} wrapper. If a page still cannot be
+fetched, that query keeps the pages already retrieved and a warning says
+its results are incomplete.
 }
 \examples{
 \dontrun{

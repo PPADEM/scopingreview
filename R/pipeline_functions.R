@@ -224,16 +224,21 @@ max_str <- function(vec) {
 #' `primary_location` (upstream openalexR <= 3.1.1 otherwise fails with
 #' `Column name doi must not be duplicated`) and converts via
 #' `openalexR::oa2df()`. Only the failed page is retried, with increasing
-#' back-off (`backoff` seconds per attempt). A genuinely empty page (including
-#' the "No records found" warning) returns an empty tibble immediately; errors
-#' are reported with `page` in the message and returned as empty once retries
-#' are exhausted or the error is not retryable.
+#' back-off (`backoff` seconds per attempt); rate limits, gateway errors and
+#' transient network failures (timeouts, DNS, connection resets) are retried.
+#' Each request uses a `timeout` of `timeout` seconds.
+#'
+#' A genuinely empty page (including the "No records found" warning) returns
+#' an empty tibble immediately. A page that could not be fetched (retries
+#' exhausted, or a non-retryable error) returns `NULL` and increments
+#' `.run_state$oa_failed`, so callers can tell "failed" apart from "empty".
 #' @noRd
 oa_fetch_retry <- function(
   ...,
   page = NULL,
   max_retries = 5,
-  backoff = c(2, 5, 10, 10, 10)
+  backoff = c(5, 10, 20, 30, 60),
+  timeout = 120
 ) {
   page_lbl <- if (is.null(page)) "?" else as.character(page)
   for (attempt in seq_len(max_retries)) {
@@ -243,7 +248,9 @@ oa_fetch_retry <- function(
     res <- withCallingHandlers(
       tryCatch(
         {
-          raw_list <- oa_fetch(..., output = "list")
+          raw_list <- suppressMessages(
+            oa_fetch(..., timeout = timeout, output = "list")
+          )
           if (is.null(raw_list) || length(raw_list) == 0) {
             tibble()
           } else {
@@ -255,7 +262,9 @@ oa_fetch_retry <- function(
             })
             tryCatch(
               oa2df(cleaned_list, entity = "works"),
-              error = function(e2) oa_fetch(...)
+              error = function(e2) {
+                suppressMessages(oa_fetch(..., timeout = timeout))
+              }
             )
           }
         },
@@ -293,7 +302,13 @@ oa_fetch_retry <- function(
     }
 
     retryable <- grepl(
-      "429|Too Many Requests|Rate limit exceeded|50[234]",
+      paste(
+        "429|Too Many Requests|Rate limit exceeded|50[234]",
+        "Timeout was reached|timed out|Could not resolve",
+        "Connection (reset|refused|timed out)",
+        "Recv failure|SSL|Empty reply",
+        sep = "|"
+      ),
       err_msg,
       ignore.case = TRUE
     )
@@ -306,7 +321,7 @@ oa_fetch_retry <- function(
     ))
     if (!retryable) {
       .run_state$oa_failed <- .run_state$oa_failed + 1L
-      return(tibble())
+      return(NULL)
     }
     if (attempt < max_retries) {
       wait_time <- backoff[min(attempt, length(backoff))]
@@ -315,7 +330,7 @@ oa_fetch_retry <- function(
     }
   }
   .run_state$oa_failed <- .run_state$oa_failed + 1L
-  tibble()
+  NULL
 }
 
 #' Fetch OpenAlex results one page at a time
@@ -324,6 +339,11 @@ oa_fetch_retry <- function(
 #' are requested sequentially with a pause between them, stopping early on a
 #' short or empty page. Basic paging is capped at 10,000 results (page 50 at
 #' 200 per page), so `max_pages` is capped at 50.
+#'
+#' If a page cannot be fetched (`oa_fetch_retry()` returns `NULL`), paging
+#' stops with a warning and the pages already collected are kept, so one bad
+#' page does not discard the rest; the failure is also counted in
+#' `.run_state$oa_failed` and reported in the final banner.
 #' @noRd
 oa_fetch_pages <- function(max_pages, oa_key, ..., per_page = 200, pause_sec = 1.1) {
   max_pages <- min(max_pages, 50)
@@ -342,6 +362,16 @@ oa_fetch_pages <- function(max_pages, oa_key, ..., per_page = 200, pause_sec = 1
         extra
       )
     )
+    if (is.null(pg)) {
+      warning(
+        sprintf(
+          "OpenAlex query stopped early at page %d; results for this query are incomplete.",
+          i
+        ),
+        call. = FALSE
+      )
+      break
+    }
     if (nrow(pg) == 0) {
       break
     }
@@ -606,8 +636,11 @@ fetch_scopus_data <- function(
 #' always queried: the `OPENALEX_KEY` environment variable is optional and,
 #' if set, is used to access OpenAlex's "polite pool" for higher rate limits;
 #' without it, queries still run but may be throttled more aggressively.
-#' HTTP 429 (rate-limit) responses are retried automatically, with an
-#' increasing back-off, via an internal `oa_fetch_retry()` wrapper.
+#' Rate-limit (HTTP 429), gateway (502-504) and transient network errors
+#' (e.g. timeouts) are retried automatically, with an increasing back-off,
+#' via an internal `oa_fetch_retry()` wrapper. If a page still cannot be
+#' fetched, that query keeps the pages already retrieved and a warning says
+#' its results are incomplete.
 #'
 #' @inheritParams fetch_scopus_data
 #' @param max_pages Maximum number of pages to retrieve per query, at 200

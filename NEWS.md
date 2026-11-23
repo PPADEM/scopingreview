@@ -8,6 +8,9 @@
 * OpenAlex pages are fetched one at a time (1.1 s apart, capped at 50 pages), stopping on a short or empty page.
 * Only the failed page is retried (5 attempts, 2/5/10 s back-off); "Rate limit exceeded" is treated as retryable, and an empty result with a warning is treated as a failure.
 * Errors are no longer silently swallowed; empty pages are no longer retried; `api_key` is passed only when `OPENALEX_KEY` is set, with a message otherwise.
+* OpenAlex timeouts and other transient network errors (DNS, connection resets, SSL, empty replies) are now retried, with a 120 s request timeout (was 30 s) and a 5/10/20/30/60 s back-off. Previously a timeout silently cut a query short.
+* A page that cannot be fetched is no longer mistaken for the end of results: paging stops with a warning that the query is incomplete, keeping the pages already retrieved.
+* openalexR's per-page progress messages are suppressed.
 * Added testthat tests for query splitting and retry logic.
 
 ---
