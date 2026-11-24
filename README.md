@@ -108,7 +108,9 @@ OpenAlex rejects queries over 1,500 characters. In `"multi"` mode, `run_scoping_
 
 ### What OpenAlex searches
 
-By default (`openalex_scope = "title_abstract"`), OpenAlex searches titles and abstracts only, so it matches the scope of Scopus's `TITLE-ABS-KEY`. `openalex_scope = "fulltext"` also searches full text. It typically returns many times more records, most of them irrelevant, and is much slower. The `search_query` column records which scope found each OpenAlex record. If one database returns more than 100 times as many records as the other, the run ends with a warning.
+By default (`openalex_scope = "exact"`), OpenAlex is searched with the `title_abstract_keywords.search.exact` filter, which matches exact words (no stemming) in titles, abstracts and keywords. This is the closest equivalent to Scopus's `TITLE-ABS-KEY`. Unlike Scopus, exact matching does not match plurals, so include plural forms of your terms (e.g. `c("election", "elections")`).
+
+`openalex_scope = "title_abstract"` searches titles and abstracts with the `title_and_abstract.search` filter, which stems words: "campaigning" also matches "campaign", so results include vaccination and marketing campaigns. In one test it returned 14,322 records against 236 with exact matching. `openalex_scope = "fulltext"` also searches full text. It typically returns many times more records, most of them irrelevant, and is much slower. The `search_query` column records which scope found each OpenAlex record. If one database returns more than 100 times as many records as the other, the run ends with a warning.
 
 ## 🚀 Example Script
 

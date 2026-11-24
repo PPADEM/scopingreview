@@ -631,13 +631,22 @@ fetch_scopus_data <- function(
 
 #' OpenAlex filter name for each search scope
 #'
+#' `"exact"` uses the `title_abstract_keywords.search.exact` filter, which
+#' matches exact (unstemmed) words in title, abstract and keywords: the
+#' closest equivalent to Scopus `TITLE-ABS-KEY`.
 #' `"title_abstract"` uses the `title_and_abstract.search` filter, which
-#' matches title and abstract only (comparable to Scopus `TITLE-ABS-KEY`).
+#' matches title and abstract but stems words ("campaigning" also matches
+#' "campaign"), so it returns many off-topic records.
 #' `"fulltext"` uses the top-level `search` parameter, which also matches
 #' full text and returns far more (mostly irrelevant) records.
 #' @noRd
 oa_scope_param <- function(scope) {
-  switch(scope, title_abstract = "title_and_abstract.search", fulltext = "search")
+  switch(
+    scope,
+    exact = "title_abstract_keywords.search.exact",
+    title_abstract = "title_and_abstract.search",
+    fulltext = "search"
+  )
 }
 
 #' Arguments to pass to oa_fetch() for a query in the given scope
@@ -648,8 +657,8 @@ oa_search_args <- function(query_str, scope) {
 
 #' Remove characters that break an OpenAlex filter value
 #'
-#' OpenAlex separates filters with commas, so a comma inside a
-#' `title_and_abstract.search` value would cut the query short. Commas are
+#' OpenAlex separates filters with commas, so a comma inside a filter value
+#' (every scope except `"fulltext"`) would cut the query short. Commas are
 #' replaced with spaces (OpenAlex ignores punctuation inside phrases anyway).
 #' @noRd
 oa_clean_query <- function(query_str, scope) {
@@ -684,15 +693,21 @@ oa_query_label <- function(query_str, scope) {
 #'   records per page (e.g. `max_pages = 5` retrieves at most 1,000 records),
 #'   capped at 50 (OpenAlex basic paging stops at 10,000 results), applied separately to each topic category query (or once, for the single
 #'   combined query, in `"multi"` mode).
-#' @param openalex_scope Which fields OpenAlex searches. `"title_abstract"`
-#'   (the default) uses OpenAlex's `title_and_abstract.search` filter, so
-#'   results are comparable to Scopus's `TITLE-ABS-KEY`. `"fulltext"` uses
-#'   OpenAlex's general `search` parameter, which also matches full text and
-#'   stems terms; it returns many more records, most of them irrelevant, and
-#'   is much slower. Changing this changes which records the review finds.
+#' @param openalex_scope Which fields OpenAlex searches, and how. `"exact"`
+#'   (the default) uses OpenAlex's `title_abstract_keywords.search.exact`
+#'   filter, which matches exact words (no stemming) in titles, abstracts and
+#'   keywords: the closest equivalent to Scopus's `TITLE-ABS-KEY`. Unlike
+#'   Scopus, it does not match plurals, so include plural forms of terms
+#'   (e.g. `c("election", "elections")`). `"title_abstract"` uses the
+#'   `title_and_abstract.search` filter, which searches titles and abstracts
+#'   but stems words (e.g. "campaigning" also matches "campaign"), so it
+#'   returns many off-topic records. `"fulltext"` uses OpenAlex's general
+#'   `search` parameter, which also matches full text and stems terms; it
+#'   returns many more records, most of them irrelevant, and is much slower.
+#'   Changing this changes which records the review finds.
 #' @return A tibble with one row per record and columns `database`,
 #'   `query_category`, `search_query` (prefixed with the OpenAlex parameter
-#'   used, e.g. `title_and_abstract.search:`), `search_date`, `scopus_id` (always
+#'   used, e.g. `title_abstract_keywords.search.exact:`), `search_date`, `scopus_id` (always
 #'   `NA`), `openalex_id`, `title`, `journal`, `publication_year`, `doi`,
 #'   `citations`, `abstract` and `authors`. Returns a zero-row tibble if no
 #'   records are found.
@@ -713,7 +728,7 @@ fetch_openalex_data <- function(
   start_year = 2020,
   topic_operator = "OR",
   max_pages = 5,
-  openalex_scope = c("title_abstract", "fulltext")
+  openalex_scope = c("exact", "title_abstract", "fulltext")
 ) {
   openalex_scope <- match.arg(openalex_scope)
   oa_key <- Sys.getenv("OPENALEX_KEY")
@@ -1227,9 +1242,11 @@ db_imbalance_note <- function(n_scopus, n_openalex, ratio = 100) {
 #'   below the limit; `NULL` disables splitting. Not applied to the `"OR"` and
 #'   `"AND"` per-category modes. Each OpenAlex query is still capped at 10,000
 #'   records (50 pages), so a chunk returning exactly 10,000 was truncated.
-#' @param openalex_scope Which fields OpenAlex searches: `"title_abstract"`
-#'   (default, comparable to Scopus `TITLE-ABS-KEY`) or `"fulltext"` (the
-#'   behaviour before this change). See [fetch_openalex_data()]. If one database
+#' @param openalex_scope Which fields OpenAlex searches: `"exact"` (default;
+#'   exact words in title, abstract and keywords, the closest equivalent to
+#'   Scopus `TITLE-ABS-KEY`, but without plural matching, so include plural
+#'   forms of terms), `"title_abstract"` (title and abstract, stemmed) or
+#'   `"fulltext"` (full text, stemmed). See [fetch_openalex_data()]. If one database
 #'   returns more than 100 times as many records as the other, the end-of-run
 #'   summary warns about it.
 #' @param output_filename Path of the CSV file to write, relative to the
@@ -1262,7 +1279,7 @@ run_scoping_review <- function(
   max_openalex_pages = 5,
   scopus_view = "STANDARD",
   max_query_chars = 1400,
-  openalex_scope = c("title_abstract", "fulltext"),
+  openalex_scope = c("exact", "title_abstract", "fulltext"),
   output_filename = "scoping_review_dataset.csv"
 ) {
   openalex_scope <- match.arg(openalex_scope)

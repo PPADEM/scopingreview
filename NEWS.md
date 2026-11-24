@@ -1,9 +1,12 @@
 # scopingreview (development)
 
-## Breaking change: OpenAlex now searches title and abstract only
-* `fetch_openalex_data()` and `run_scoping_review()` gain `openalex_scope`, defaulting to `"title_abstract"`. OpenAlex is now queried with the `title_and_abstract.search` filter, which matches the scope of Scopus's `TITLE-ABS-KEY`. Previously OpenAlex used `search=`, which also matches full text and stems terms. That returned far more records than Scopus, mostly irrelevant ones (9 vs 16,895 in one run), and made heavy queries slow. `openalex_scope = "fulltext"` restores the old behaviour. **This changes which records a review finds. Results from earlier versions are not comparable.**
-* OpenAlex `search_query` values are prefixed with the parameter used (`title_and_abstract.search:` or `search:`), so the CSV shows how each record was found.
-* Commas in search terms are replaced with spaces in title-and-abstract mode, because OpenAlex uses commas to separate filters.
+## Breaking change: OpenAlex now uses exact matching on title, abstract and keywords
+* `fetch_openalex_data()` and `run_scoping_review()` gain `openalex_scope`, defaulting to `"exact"`. OpenAlex is now queried with the `title_abstract_keywords.search.exact` filter, which matches exact words (no stemming) in titles, abstracts and keywords: the closest equivalent to Scopus's `TITLE-ABS-KEY`. **This changes which records a review finds. Results from earlier versions are not comparable.**
+* Exact matching does not match plurals, unlike Scopus, so include plural forms of terms (e.g. `c("election", "elections")`).
+* `openalex_scope = "title_abstract"` uses the `title_and_abstract.search` filter. An earlier development version used this as the default and described it as matching Scopus's `TITLE-ABS-KEY`; that was inaccurate. It stems words ("campaigning" also matches "campaign"), so it returns many off-topic records (14,322 vs 236 with exact matching in one test).
+* `openalex_scope = "fulltext"` restores the behaviour of earlier releases, which used `search=`. That also matches full text and stems terms, returning far more records than Scopus, mostly irrelevant ones (9 vs 16,895 in one run), and made heavy queries slow.
+* OpenAlex `search_query` values are prefixed with the parameter used (`title_abstract_keywords.search.exact:`, `title_and_abstract.search:` or `search:`), so the CSV shows how each record was found.
+* Commas in search terms are replaced with spaces in the `"exact"` and `"title_abstract"` scopes, because OpenAlex uses commas to separate filters.
 * The end-of-run summary warns when one database returns more than 100 times as many records as the other.
 
 ## New features

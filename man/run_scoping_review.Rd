@@ -13,7 +13,7 @@ run_scoping_review(
   max_openalex_pages = 5,
   scopus_view = "STANDARD",
   max_query_chars = 1400,
-  openalex_scope = c("title_abstract", "fulltext"),
+  openalex_scope = c("exact", "title_abstract", "fulltext"),
   output_filename = "scoping_review_dataset.csv"
 )
 }
@@ -70,9 +70,11 @@ below the limit; \code{NULL} disables splitting. Not applied to the \code{"OR"} 
 \code{"AND"} per-category modes. Each OpenAlex query is still capped at 10,000
 records (50 pages), so a chunk returning exactly 10,000 was truncated.}
 
-\item{openalex_scope}{Which fields OpenAlex searches: \code{"title_abstract"}
-(default, comparable to Scopus \code{TITLE-ABS-KEY}) or \code{"fulltext"} (the
-behaviour before this change). See \code{\link[=fetch_openalex_data]{fetch_openalex_data()}}. If one database
+\item{openalex_scope}{Which fields OpenAlex searches: \code{"exact"} (default;
+exact words in title, abstract and keywords, the closest equivalent to
+Scopus \code{TITLE-ABS-KEY}, but without plural matching, so include plural
+forms of terms), \code{"title_abstract"} (title and abstract, stemmed) or
+\code{"fulltext"} (full text, stemmed). See \code{\link[=fetch_openalex_data]{fetch_openalex_data()}}. If one database
 returns more than 100 times as many records as the other, the end-of-run
 summary warns about it.}
 

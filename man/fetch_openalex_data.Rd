@@ -10,7 +10,7 @@ fetch_openalex_data(
   start_year = 2020,
   topic_operator = "OR",
   max_pages = 5,
-  openalex_scope = c("title_abstract", "fulltext")
+  openalex_scope = c("exact", "title_abstract", "fulltext")
 )
 }
 \arguments{
@@ -49,17 +49,23 @@ records per page (e.g. \code{max_pages = 5} retrieves at most 1,000 records),
 capped at 50 (OpenAlex basic paging stops at 10,000 results), applied separately to each topic category query (or once, for the single
 combined query, in \code{"multi"} mode).}
 
-\item{openalex_scope}{Which fields OpenAlex searches. \code{"title_abstract"}
-(the default) uses OpenAlex's \code{title_and_abstract.search} filter, so
-results are comparable to Scopus's \code{TITLE-ABS-KEY}. \code{"fulltext"} uses
-OpenAlex's general \code{search} parameter, which also matches full text and
-stems terms; it returns many more records, most of them irrelevant, and
-is much slower. Changing this changes which records the review finds.}
+\item{openalex_scope}{Which fields OpenAlex searches, and how. \code{"exact"}
+(the default) uses OpenAlex's \code{title_abstract_keywords.search.exact}
+filter, which matches exact words (no stemming) in titles, abstracts and
+keywords: the closest equivalent to Scopus's \code{TITLE-ABS-KEY}. Unlike
+Scopus, it does not match plurals, so include plural forms of terms
+(e.g. \code{c("election", "elections")}). \code{"title_abstract"} uses the
+\code{title_and_abstract.search} filter, which searches titles and abstracts
+but stems words (e.g. "campaigning" also matches "campaign"), so it
+returns many off-topic records. \code{"fulltext"} uses OpenAlex's general
+\code{search} parameter, which also matches full text and stems terms; it
+returns many more records, most of them irrelevant, and is much slower.
+Changing this changes which records the review finds.}
 }
 \value{
 A tibble with one row per record and columns \code{database},
 \code{query_category}, \code{search_query} (prefixed with the OpenAlex parameter
-used, e.g. \verb{title_and_abstract.search:}), \code{search_date}, \code{scopus_id} (always
+used, e.g. \verb{title_abstract_keywords.search.exact:}), \code{search_date}, \code{scopus_id} (always
 \code{NA}), \code{openalex_id}, \code{title}, \code{journal}, \code{publication_year}, \code{doi},
 \code{citations}, \code{abstract} and \code{authors}. Returns a zero-row tibble if no
 records are found.
