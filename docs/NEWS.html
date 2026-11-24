@@ -129,7 +129,7 @@ ul.task-list li input[type="checkbox"] {
   <ul>
   <li><a href="#scopingreview-development" id="toc-scopingreview-development" class="nav-link active" data-scroll-target="#scopingreview-development">scopingreview (development)</a>
   <ul class="collapse">
-  <li><a href="#breaking-change-openalex-now-searches-title-and-abstract-only" id="toc-breaking-change-openalex-now-searches-title-and-abstract-only" class="nav-link" data-scroll-target="#breaking-change-openalex-now-searches-title-and-abstract-only">Breaking change: OpenAlex now searches title and abstract only</a></li>
+  <li><a href="#breaking-change-openalex-now-uses-exact-matching-on-title-abstract-and-keywords" id="toc-breaking-change-openalex-now-uses-exact-matching-on-title-abstract-and-keywords" class="nav-link" data-scroll-target="#breaking-change-openalex-now-uses-exact-matching-on-title-abstract-and-keywords">Breaking change: OpenAlex now uses exact matching on title, abstract and keywords</a></li>
   <li><a href="#new-features" id="toc-new-features" class="nav-link" data-scroll-target="#new-features">New features</a></li>
   <li><a href="#bug-fixes-api-resilience" id="toc-bug-fixes-api-resilience" class="nav-link" data-scroll-target="#bug-fixes-api-resilience">Bug Fixes &amp; API Resilience</a></li>
   </ul></li>
@@ -150,12 +150,15 @@ ul.task-list li input[type="checkbox"] {
 
 <section id="scopingreview-development" class="level1">
 <h1>scopingreview (development)</h1>
-<section id="breaking-change-openalex-now-searches-title-and-abstract-only" class="level2">
-<h2 class="anchored" data-anchor-id="breaking-change-openalex-now-searches-title-and-abstract-only">Breaking change: OpenAlex now searches title and abstract only</h2>
+<section id="breaking-change-openalex-now-uses-exact-matching-on-title-abstract-and-keywords" class="level2">
+<h2 class="anchored" data-anchor-id="breaking-change-openalex-now-uses-exact-matching-on-title-abstract-and-keywords">Breaking change: OpenAlex now uses exact matching on title, abstract and keywords</h2>
 <ul>
-<li><code>fetch_openalex_data()</code> and <code>run_scoping_review()</code> gain <code>openalex_scope</code>, defaulting to <code>"title_abstract"</code>. OpenAlex is now queried with the <code>title_and_abstract.search</code> filter, which matches the scope of Scopus’s <code>TITLE-ABS-KEY</code>. Previously OpenAlex used <code>search=</code>, which also matches full text and stems terms. That returned far more records than Scopus, mostly irrelevant ones (9 vs 16,895 in one run), and made heavy queries slow. <code>openalex_scope = "fulltext"</code> restores the old behaviour. <strong>This changes which records a review finds. Results from earlier versions are not comparable.</strong></li>
-<li>OpenAlex <code>search_query</code> values are prefixed with the parameter used (<code>title_and_abstract.search:</code> or <code>search:</code>), so the CSV shows how each record was found.</li>
-<li>Commas in search terms are replaced with spaces in title-and-abstract mode, because OpenAlex uses commas to separate filters.</li>
+<li><code>fetch_openalex_data()</code> and <code>run_scoping_review()</code> gain <code>openalex_scope</code>, defaulting to <code>"exact"</code>. OpenAlex is now queried with the <code>title_abstract_keywords.search.exact</code> filter, which matches exact words (no stemming) in titles, abstracts and keywords: the closest equivalent to Scopus’s <code>TITLE-ABS-KEY</code>. <strong>This changes which records a review finds. Results from earlier versions are not comparable.</strong></li>
+<li>Exact matching does not match plurals, unlike Scopus, so include plural forms of terms (e.g.&nbsp;<code>c("election", "elections")</code>).</li>
+<li><code>openalex_scope = "title_abstract"</code> uses the <code>title_and_abstract.search</code> filter. An earlier development version used this as the default and described it as matching Scopus’s <code>TITLE-ABS-KEY</code>; that was inaccurate. It stems words (“campaigning” also matches “campaign”), so it returns many off-topic records (14,322 vs 236 with exact matching in one test).</li>
+<li><code>openalex_scope = "fulltext"</code> restores the behaviour of earlier releases, which used <code>search=</code>. That also matches full text and stems terms, returning far more records than Scopus, mostly irrelevant ones (9 vs 16,895 in one run), and made heavy queries slow.</li>
+<li>OpenAlex <code>search_query</code> values are prefixed with the parameter used (<code>title_abstract_keywords.search.exact:</code>, <code>title_and_abstract.search:</code> or <code>search:</code>), so the CSV shows how each record was found.</li>
+<li>Commas in search terms are replaced with spaces in the <code>"exact"</code> and <code>"title_abstract"</code> scopes, because OpenAlex uses commas to separate filters.</li>
 <li>The end-of-run summary warns when one database returns more than 100 times as many records as the other.</li>
 </ul>
 </section>
